@@ -5,6 +5,7 @@
  * - 高峰模式：按钮/开关均可用
  * - 兼容旧键：POS_HAND_MODE / POS_LEFTY / POS_RIGHTY
  * - 额外桥接：点击包含 hand_mode 的整行也会触发切换（防止“选中了但未触发事件”）
+ * Revision: 2.3.0 (Add printTemplates state)
  */
 
 //////////////////// I18N ////////////////////
@@ -41,28 +42,34 @@ export const I18N = {
     member_create_submit: '创建并关联', member_create_success: '新会员已创建并关联到订单！',
     points_redeem_placeholder: '使用积分', points_apply_btn: '应用', points_rule: '100积分 = 1€',
     points_feedback_applied: '已用 {points} 积分抵扣 €{amount}', points_feedback_not_enough: '积分不足或超出上限',
-    
-    // --- 核心修复：为漏结和积分兑换添加翻译 ---
+
     unclosed_eod_title: '操作提醒',
     unclosed_eod_header: '上一营业日未日结',
     unclosed_eod_message: '系统检测到日期为 {date} 的营业日没有日结报告。',
     unclosed_eod_instruction: '为保证数据准确，请先完成该日期的日结，再开始新的营业日。',
     unclosed_eod_button: '立即完成上一日日结',
     unclosed_eod_force_button: '强制开启新一日 (需授权)',
-    
+
     start_date: '起始日期',
     end_date: '截止日期',
     query: '查询',
     validation_date_range_too_large: '查询范围不能超过一个月。',
     validation_end_date_in_future: '截止日期不能是未来日期。',
     validation_end_date_before_start: '截止日期不能早于起始日期。',
-    
+
     points_available_rewards: '可用积分兑换',
     points_redeem_button: '兑换',
     points_redeemed_success: '已应用积分兑换！',
     points_insufficient: '积分不足，无法兑换。',
     redemption_incompatible: '积分兑换不能与优惠券同时使用。',
-    redemption_applied: '已兑换'
+    redemption_applied: '已兑换',
+    // --- Add EOD Print ---
+    eod_print_report: '打印报告',
+    print_failed: '打印失败',
+    print_data_fetch_failed: '获取打印数据失败',
+    print_template_missing: '找不到对应的打印模板',
+    print_preview_title: '打印预览 (模拟)',
+    close: '关闭'
   },
   es: {
     internal:'Interno', lang_zh:'Chino', lang_es:'Español', cart:'Carrito', total_before_discount:'Total', more:'Más',
@@ -87,7 +94,7 @@ export const I18N = {
     eod_success_submit: '¡Cierre archivado!', eod_confirm_title: 'Confirmar Cierre', eod_confirm_body: 'Será definitivo.',
     eod_confirm_cancel: 'Cancelar', eod_confirm_submit: 'Confirmar',
     eod_confirm_headnote: 'Después del envío no se podrá volver a cerrar', eod_confirm_text: 'Será definitivo.',
-    
+
     member_search_placeholder: 'Buscar socio por teléfono', member_find: 'Buscar', member_not_found: 'Socio no encontrado',
     member_create: 'Crear nuevo socio', member_name: 'Nombre', member_points: 'Puntos', member_level: 'Nivel',
     member_unlink: 'Desvincular', member_create_title: 'Crear Nuevo Socio', member_phone: 'Teléfono',
@@ -97,14 +104,13 @@ export const I18N = {
     points_feedback_applied: '{points} puntos aplicados, descuento de €{amount}',
     points_feedback_not_enough: 'Puntos insuficientes o excede el límite',
 
-    // --- 核心修复：为漏结和积分兑换添加翻译 ---
     unclosed_eod_title: 'Aviso de Operación',
     unclosed_eod_header: 'Día Anterior No Cerrado',
     unclosed_eod_message: 'El sistema detectó que el día hábil con fecha {date} no tiene informe de cierre.',
     unclosed_eod_instruction: 'Para garantizar la precisión de los datos, complete primero el cierre de ese día antes de comenzar un nuevo día hábil.',
     unclosed_eod_button: 'Completar Cierre Anterior Ahora',
     unclosed_eod_force_button: 'Forzar Inicio Nuevo Día (Requiere Autorización)',
-    
+
     start_date: 'Fecha de inicio',
     end_date: 'Fecha de finalización',
     query: 'Consultar',
@@ -117,7 +123,14 @@ export const I18N = {
     points_redeemed_success: '¡Canje de puntos aplicado!',
     points_insufficient: 'Puntos insuficientes para canjear.',
     redemption_incompatible: 'El canje de puntos no se puede usar con un cupón.',
-    redemption_applied: 'Canjeado'
+    redemption_applied: 'Canjeado',
+     // --- Add EOD Print ---
+    eod_print_report: 'Imprimir Informe',
+    print_failed: 'Fallo de impresión',
+    print_data_fetch_failed: 'Fallo al obtener datos de impresión',
+    print_template_missing: 'Plantilla de impresión no encontrada',
+    print_preview_title: 'Vista Previa de Impresión (Simulado)',
+    close: 'Cerrar'
   }
 };
 
@@ -128,9 +141,10 @@ export const STATE = {
   products: [],
   categories: [],
   addons: [],
-  redemptionRules: [], // --- 核心修复：新增 state ---
+  redemptionRules: [],
+  printTemplates: {}, // --- CORE ADDITION: Store for print templates ---
   activeCouponCode: '',
-  activeRedemptionRuleId: null, // --- 核心修复：新增 state ---
+  activeRedemptionRuleId: null,
   calculatedCart: { cart: [], subtotal: 0, discount_amount: 0, final_total: 0 },
   payment: { total: 0, parts: [] },
   holdSortBy: 'time_desc',
@@ -265,7 +279,7 @@ function applyPeak(on){
   const flag = !!on;
   STATE.ui.peak = flag;
   for (const el of TARGETS){
-    el.classList.toggle('contrast-boost', flag); 
+    el.classList.toggle('contrast-boost', flag);
     el.setAttribute('data-peak', flag ? '1' : '0');
   }
   document.documentElement.setAttribute('data-peak', flag ? '1' : '0');

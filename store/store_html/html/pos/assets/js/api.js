@@ -22,6 +22,7 @@ async function apiCall(url, options = {}) {
 }
 
 export async function fetchInitialData() {
+    // Fetch main POS data (products, categories, etc.)
     const result = await apiCall('./api/pos_data_loader.php');
     if (result.status === 'success') {
         STATE.products = result.data.products;
@@ -32,6 +33,8 @@ export async function fetchInitialData() {
             STATE.active_category_key = STATE.categories[0].key;
         }
     }
+    // --- CORE ADDITION: Fetch print templates after main data ---
+    await fetchPrintTemplates();
 }
 
 /**
@@ -39,10 +42,31 @@ export async function fetchInitialData() {
  * Fetches all available print templates from the backend.
  */
 export async function fetchPrintTemplates() {
-    const result = await apiCall('./api/pos_print_handler.php?action=get_templates');
+    try {
+        const result = await apiCall('./api/pos_print_handler.php?action=get_templates');
+        if (result.status === 'success') {
+            STATE.printTemplates = result.data || {};
+            console.log('Print templates loaded:', STATE.printTemplates);
+        } else {
+             console.error('Failed to load print templates:', result.message);
+             STATE.printTemplates = {}; // Ensure it's an empty object on failure
+        }
+    } catch (error) {
+        console.error('Network error fetching print templates:', error);
+        STATE.printTemplates = {}; // Ensure it's an empty object on network error
+    }
+}
+
+/**
+ * Version: 2.2.0
+ * Fetches the specific data required for printing an EOD report.
+ */
+export async function fetchEodPrintData(reportId) {
+    const result = await apiCall(`./api/pos_print_handler.php?action=get_eod_print_data&report_id=${reportId}`);
     if (result.status === 'success') {
-        STATE.printTemplates = result.data || {};
-        console.log('Print templates loaded:', STATE.printTemplates);
+        return result.data;
+    } else {
+        throw new Error(result.message || 'Failed to fetch EOD print data');
     }
 }
 

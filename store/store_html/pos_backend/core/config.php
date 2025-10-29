@@ -2,7 +2,7 @@
 /**
  * TopTea POS - Core Configuration
  * This file contains sensitive information and is stored outside the web root.
- * Engineer: Gemini | Date: 2025-10-26
+ * Engineer: Gemini | Date: 2025-10-29 | Revision: 2.1 (Enable File Logging)
  */
 
 // --- Database Configuration (Same as all other systems) ---
@@ -13,8 +13,11 @@ $db_pass = 'p8PQF7M8ZKLVxtjvatMkrthFQQUB9';
 $db_char = 'utf8mb4';
 
 // --- Error Reporting ---
-ini_set('display_errors', 1); // Set to 0 in production
-error_reporting(E_ALL);
+ini_set('display_errors', '0'); // Turn off displaying errors in production
+ini_set('display_startup_errors', '0'); // Turn off displaying startup errors
+ini_set('log_errors', '1'); // Enable error logging to file
+ini_set('error_log', '/web_toptea/logs/php_errors_pos.log'); // Specify log file path (Adjust path if needed)
+error_reporting(E_ALL); // Report all errors
 
 // --- Database Connection (PDO) ---
 $dsn = "mysql:host=$db_host;dbname=$db_name;charset=$db_char";
@@ -26,7 +29,8 @@ $options = [
 try {
     $pdo = new PDO($dsn, $db_user, $db_pass, $options);
 } catch (\PDOException $e) {
-    // In a real app, you would log this error, not display it.
+    // Log the error instead of echoing
+    error_log("Database connection failed: " . $e->getMessage());
     http_response_code(503);
     echo json_encode(['status' => 'error', 'message' => 'Database connection failed.']);
     exit;

@@ -1,7 +1,11 @@
 import { STATE } from '../state.js';
 import { t, fmtEUR, toast } from '../utils.js';
+// --- CORE ADDITION: Import print function and API call ---
+import { fetchEodPrintData } from '../api.js';
+import { printReceipt } from './print.js'; // Assuming print.js exists or will be created
 
 let pendingEodPayload = null; // 覆盖式确认使用
+let currentReportId = null; // --- CORE ADDITION: Store ID for printing ---
 
 /* ========== 文案安全取值（t(key) == key 视为缺失） ========== */
 function safeT(key, fallback){
@@ -43,6 +47,25 @@ function ensureModalsExist(){
   </div>
 </div>`);
   }
+   // --- CORE ADDITION: Ensure Print Preview Modal exists ---
+   if (!getEl('printPreviewModal')) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="printPreviewModal" tabindex="-1" aria-labelledby="printPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content modal-sheet">
+            <div class="modal-header">
+              <h5 class="modal-title" id="printPreviewModalLabel">${safeT('print_preview_title', '打印预览 (模拟)')}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="${safeT('close', '关闭')}"></button>
+            </div>
+            <div class="modal-body" id="printPreviewBody" style="font-family: monospace; white-space: pre; font-size: 0.8rem;">
+              </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${safeT('close', '关闭')}</button>
+            </div>
+          </div>
+        </div>
+      </div>`);
+   }
 }
 
 /* ========== 可见性兜底 ========== */
@@ -108,13 +131,13 @@ function parseEuroNumber(input){
 /**
  * **核心修复函数**: 统一处理来自API的两种数据结构。
  * 1. 新预览: { ..., payments: { Cash: ..., Card: ... } }
- * 2. 已有报告: { ..., system_cash: ..., system_card: ... }
+ * 2. 已有报告: { ..., system_cash: ..., system_card: ..., id: report_id } <-- **包含ID**
  * 这个函数将它们都转换为统一的内部结构。
  */
 function normalizePreviewData(raw={}){
     const d = {...raw};
     const pb = d.payments || d.payment_breakdown || {};
-    
+
     // **关键逻辑**: 优先使用 'payments' 对象，如果不存在，则从顶层字段 'system_cash' 等回退。
     const payments = {
         Cash: pb.Cash ?? d.system_cash ?? 0,
@@ -123,8 +146,11 @@ function normalizePreviewData(raw={}){
     };
 
     return {
+        // --- CORE ADDITION: Include report ID ---
+        id: d.id || null, // ID will be present for existing reports
+        // --- End Addition ---
         report_date: d.report_date || '-',
-        is_submitted: !!d.is_submitted,
+        is_submitted: !!d.is_submitted || !!d.id, // Consider existing report as submitted
         transactions_count: d.transactions_count ?? d.transaction_count ?? 0,
         system_gross_sales: d.system_gross_sales ?? d.gross_sales ?? 0,
         system_discounts: d.system_discounts ?? d.total_discounts ?? 0,
@@ -235,21 +261,28 @@ export async function openEodModal(){
 
     // **核心修复**: 统一使用 normalizePreviewData 函数处理所有情况
     const data = result.data.is_submitted ? normalizePreviewData(result.data.existing_report) : normalizePreviewData(result.data);
-    
+
+    // --- CORE ADDITION: Store the report ID if available ---
+    currentReportId = data.id;
+
     if (data.is_submitted) {
         const discrepancy = parseFloat(data.cash_discrepancy);
         const discrepancyClass = discrepancy === 0 ? 'text-success' : 'text-danger';
         const discrepancyText = discrepancy > 0 ? `+${fmtEUR(discrepancy)}` : fmtEUR(discrepancy);
-        // **核心修复**: 统一使用 data.payments.Cash 等
         const body = `
             <div class="alert alert-info" role="alert"><h4 class="alert-heading">${safeT('eod_submitted_already', '今日已日结')}</h4><p>${safeT('eod_submitted_desc', '今日报告已存档，以下为存档数据。')}</p></div>
             <div class="row g-3"><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_date','报告日期')}</div><div class="value">${data.report_date}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_txn_count','交易笔数')}</div><div class="value">${data.transactions_count}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_net_sales','净销售额')}</div><div class="value">${fmtEUR(data.system_net_sales)}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_cash_discrepancy','现金差异')}</div><div class="value ${discrepancyClass}">${discrepancyText}</div></div></div></div><hr><h6 class="fw-bold mb-2">${safeT('eod_payments','收款方式汇总')}</h6>
             <div class="row g-2"><div class="col-4"><div class="card card-sheet p-2"><div class="small text-muted">${safeT('eod_cash','现金收款')}</div><div class="fs-5">${fmtEUR(data.payments.Cash)}</div></div></div><div class="col-4"><div class="card card-sheet p-2"><div class="small text-muted">${safeT('eod_card','刷卡收款')}</div><div class="fs-5">${fmtEUR(data.payments.Card)}</div></div></div><div class="col-4"><div class="card card-sheet p-2"><div class="small text-muted">${safeT('eod_platform','平台收款')}</div><div class="fs-5">${fmtEUR(data.payments.Platform)}</div></div></div></div>
              ${data.notes ? `<hr><p class="text-muted mb-0"><strong>备注:</strong> ${data.notes.replace(/</g, "&lt;")}</p>` : ''}`;
         $('#eod_summary_body').html(body);
-        $('#eod_summary_footer').html(`<button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">${safeT('close','关闭')}</button>`);
+        // --- CORE ADDITION: Add Print Button ---
+        $('#eod_summary_footer').html(`
+            <button type="button" class="btn btn-info w-100" id="btn_print_eod_report">
+                <i class="bi bi-printer me-2"></i>${safeT('eod_print_report','打印报告')}
+            </button>
+            <button type="button" class="btn btn-secondary w-100 mt-2" data-bs-dismiss="modal">${safeT('close','关闭')}</button>
+        `);
     } else {
-        // **核心修复**: 统一使用 data.payments.Cash 等
         const body = `
           <div class="row g-3"><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_date','报告日期')}</div><div class="value">${data.report_date}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_txn_count','交易笔数')}</div><div class="value">${data.transactions_count}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_gross_sales','总销售额')}</div><div class="value">${fmtEUR(data.system_gross_sales)}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_discounts','折扣总额')}</div><div class="value">${fmtEUR(data.system_discounts)}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_net_sales','净销售额')}</div><div class="value">${fmtEUR(data.system_net_sales)}</div></div></div><div class="col-6 col-md-3"><div class="stat"><div class="label">${safeT('eod_tax','税额')}</div><div class="value">${fmtEUR(data.system_tax)}</div></div></div><div class="col-12"><hr></div>
             <div class="col-12"><h6 class="fw-bold mb-2">${safeT('eod_payments','收款方式汇总')}</h6>
@@ -312,7 +345,7 @@ export async function submitEodReportFinal(){
     if(scr) scr.remove();
     const s = getOrCreateModal('eodSummaryModal');
     if(s) s.hide();
-    window.location.reload(); 
+    window.location.reload();
   }catch(err){
     console.error('[EOD] Submit error:', err);
     toast('提交失败: ' + (err.message||'网络错误'));
@@ -321,8 +354,44 @@ export async function submitEodReportFinal(){
   }
 }
 
+/**
+ * --- CORE ADDITION: Handle EOD Report Printing ---
+ */
+export async function handlePrintEodReport() {
+    if (!currentReportId) {
+        toast('Error: Report ID not found.');
+        return;
+    }
+    const printButton = document.getElementById('btn_print_eod_report');
+    if (printButton) printButton.disabled = true;
+
+    try {
+        // 1. Fetch print-specific data for the report
+        const reportData = await fetchEodPrintData(currentReportId);
+
+        // 2. Get the EOD_REPORT template
+        const template = STATE.printTemplates?.EOD_REPORT;
+        if (!template) {
+            throw new Error(safeT('print_template_missing', '找不到对应的打印模板'));
+        }
+
+        // 3. Call the print function (from print.js or utils.js)
+        await printReceipt(reportData, template);
+
+    } catch (error) {
+        console.error('EOD Print Error:', error);
+        toast(`${safeT('print_failed', '打印失败')}: ${error.message}`);
+    } finally {
+        if (printButton) printButton.disabled = false;
+    }
+}
+
+
 /* ========== 事件委托兜底（按钮一定触发） ========== */
 $(document).off('click.eod', '#btn_submit_eod_start').on('click.eod',  '#btn_submit_eod_start', openEodConfirmationModal);
 $(document).off('click.eod', '#eodDoSubmit').on('click.eod',  '#eodDoSubmit', submitEodReportFinal);
 $(document).off('click.eod', '#eodCancelConfirm').on('click.eod',  '#eodCancelConfirm', () => { const scr = document.getElementById('eodConfirmScreen'); if(scr) scr.remove(); });
+// --- CORE ADDITION: Add listener for the new print button ---
+$(document).off('click.eod', '#btn_print_eod_report').on('click.eod', '#btn_print_eod_report', handlePrintEodReport);
+
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ const scr = document.getElementById('eodConfirmScreen'); if(scr) scr.remove(); } });
