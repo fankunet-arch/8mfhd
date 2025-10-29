@@ -1,21 +1,18 @@
 import { STATE, I18N } from './state.js';
 import { applyI18N, renderCategories, renderProducts, renderAddons, openCustomize, updateCustomizePrice, refreshCartUI, updateMemberUI } from './ui.js';
-import { fetchInitialData, fetchPrintTemplates, fetchEodPrintData } from './api.js'; // Ensure fetchPrintTemplates is imported if called separately
+import { fetchInitialData, fetchPrintTemplates, fetchEodPrintData } from './api.js';
 import { t, toast } from './utils.js';
 import { addToCart, updateCartItem, calculatePromotions } from './modules/cart.js';
 import { openPaymentModal, addPaymentPart, updatePaymentState, submitOrder } from './modules/payment.js';
 import { openHoldOrdersPanel, createHoldOrder, restoreHeldOrder, refreshHeldOrdersList } from './modules/hold.js';
 import { openEodModal, openEodConfirmationModal, submitEodReportFinal, handlePrintEodReport } from './modules/eod.js';
-// --- CORE CHANGE: Import initializeRefundModal and requestRefundActionConfirmation ---
-import { openTxnQueryPanel, showTxnDetails, initializeRefundModal, requestRefundActionConfirmation } from './modules/transactions.js';
+import { openTxnQueryPanel, showTxnDetails, initializeRefundModal } from './modules/transactions.js';
 import { handleSettingChange } from './modules/settings.js';
 import { findMember, unlinkMember, showCreateMemberModal, createMember } from './modules/member.js';
-// --- FIX: Correct import path for print.js ---
-import { initializePrintSimulator, printReceipt } from './modules/print.js'; // Ensure printReceipt is imported if used directly
+import { initializePrintSimulator, printReceipt } from './modules/print.js';
+import { checkShiftStatus } from './modules/shift.js';
 
-// --- Add console log right after imports to verify execution proceeds ---
 console.log("Modules imported successfully in main.js");
-
 
 // Add new I18N keys
 const I18N_NS = (typeof I18N === 'object' && I18N) ? I18N : (window.I18N = window.I18N || {});
@@ -76,14 +73,13 @@ Object.assign(I18N_NS.zh, {
   validation_date_range_too_large: '查询范围不能超过一个月。',
   validation_end_date_in_future: '截止日期不能是未来日期。',
   validation_end_date_before_start: '截止日期不能早于起始日期。',
-  validation_select_dates: '请选择起始和截止日期', // Added for validation
+  validation_select_dates: '请选择起始和截止日期',
   points_available_rewards: '可用积分兑换',
   points_redeem_button: '兑换',
   points_redeemed_success: '已应用积分兑换！',
   points_insufficient: '积分不足，无法兑换。',
   redemption_incompatible: '积分兑换不能与优惠券同时使用。',
   redemption_applied: '已兑换',
-   // --- Transaction Details ---
   loading: '加载中',
   time: '时间',
   cashier: '收银员',
@@ -98,7 +94,6 @@ Object.assign(I18N_NS.zh, {
   vat: '税额',
   total: '总计',
   invoice_details: '票据详情',
-   // --- Refund/Cancel Actions ---
   cancel_invoice: '作废此单',
   correct_invoice: '开具更正票据',
   confirm_cancel_invoice_title: '确认作废票据',
@@ -106,7 +101,8 @@ Object.assign(I18N_NS.zh, {
   confirm_cancel_invoice_confirm: '确认作废',
   confirm_correct_invoice_title: '确认开具更正票据',
   confirm_correct_invoice_body: '为票据 {invoiceNumber} 开具更正票据？请在 HQ 后台完成后续操作。',
-  confirm_correct_invoice_confirm: '确认开具'
+  confirm_correct_invoice_confirm: '确认开具',
+  shift_handover: '交接班'
 });
 Object.assign(I18N_NS.es, {
    internal:'Interno', lang_zh:'Chino', lang_es:'Español', cart:'Carrito', total_before_discount:'Total', more:'Más',
@@ -161,14 +157,13 @@ Object.assign(I18N_NS.es, {
   validation_date_range_too_large: 'El rango de fechas no puede exceder un mes.',
   validation_end_date_in_future: 'La fecha de finalización no puede ser futura.',
   validation_end_date_before_start: 'La fecha de finalización no puede ser anterior a la de inicio.',
-  validation_select_dates: 'Por favor, seleccione las fechas de inicio y fin', // Added for validation
+  validation_select_dates: 'Por favor, seleccione las fechas de inicio y fin',
   points_available_rewards: 'Recompensas Disponibles',
   points_redeem_button: 'Canjear',
   points_redeemed_success: '¡Canje de puntos aplicado!',
   points_insufficient: 'Puntos insuficientes para canjear.',
   redemption_incompatible: 'El canje de puntos no se puede usar con un cupón.',
   redemption_applied: 'Canjeado',
-   // --- Transaction Details ---
   loading: 'Cargando',
   time: 'Hora',
   cashier: 'Cajero',
@@ -183,7 +178,6 @@ Object.assign(I18N_NS.es, {
   vat: 'IVA',
   total: 'Total',
   invoice_details: 'Detalles del Ticket',
-   // --- Refund/Cancel Actions ---
   cancel_invoice: 'Anular Ticket',
   correct_invoice: 'Factura Rectificativa',
   confirm_cancel_invoice_title: 'Confirmar Anulación',
@@ -191,10 +185,30 @@ Object.assign(I18N_NS.es, {
   confirm_cancel_invoice_confirm: 'Confirmar Anulación',
   confirm_correct_invoice_title: 'Confirmar Factura Rectificativa',
   confirm_correct_invoice_body: '¿Emitir factura rectificativa para el ticket {invoiceNumber}? Complete la operación en el HQ.',
-  confirm_correct_invoice_confirm: 'Confirmar Emisión'
+  confirm_correct_invoice_confirm: 'Confirmar Emisión',
+  shift_handover: 'Cierre de Turno'
 });
 
-// --- 显示漏结提示的纯HTML覆盖层 ---
+/**
+ * Starts a clock to update the time in the navbar every second.
+ */
+function startClock() {
+    const clockEl = document.getElementById('pos_clock');
+    if (!clockEl) return;
+
+    function tick() {
+        clockEl.textContent = new Date().toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+    }
+    tick(); 
+    setInterval(tick, 1000);
+}
+
+
 function showUnclosedEodOverlay(unclosedDate) {
     const existingOverlay = document.getElementById('eod-block-overlay');
     if (existingOverlay) existingOverlay.remove();
@@ -240,13 +254,20 @@ function showUnclosedEodOverlay(unclosedDate) {
 
 
 function bindEvents() {
-  console.log("Binding events..."); // Log start
+  console.log("Binding events..."); 
 
   // --- Language & Sync ---
-  $('.dropdown-menu [data-lang]').off('click').on('click', function(e) { // Use .off('click').on('click') for safety
-      console.log("Language change clicked:", $(this).data('lang'));
+  $('.dropdown-menu [data-lang]').off('click').on('click', function(e) { 
       e.preventDefault();
-      STATE.lang = $(this).data('lang');
+      const newLang = $(this).data('lang');
+      console.log("Language change clicked:", newLang);
+      
+      // --- START: ACTIVE CLASS FIX ---
+      $('.dropdown-menu [data-lang]').removeClass('active');
+      $(this).addClass('active');
+      // --- END: ACTIVE CLASS FIX ---
+  
+      STATE.lang = newLang;
       localStorage.setItem('POS_LANG', STATE.lang);
       applyI18N();
       renderCategories();
@@ -290,6 +311,11 @@ function bindEvents() {
   $('#btn_open_eod').off('click').on('click', openEodModal);
   $('#btn_open_holds').off('click').on('click', openHoldOrdersPanel);
   $('#btn_open_txn_query').off('click').on('click', openTxnQueryPanel);
+  
+  $(document).off('click', '#btn_open_shift_end').on('click', '#btn_open_shift_end', () => {
+    const endShiftModal = new bootstrap.Modal(document.getElementById('endShiftModal'));
+    endShiftModal.show();
+  });
 
   // --- Hold ---
   $('#btn_hold_current_cart').off('click').on('click', function() { if (STATE.cart.length === 0) { toast(t('tip_empty_cart')); return; } const cartOffcanvas = bootstrap.Offcanvas.getInstance('#cartOffcanvas'); if (cartOffcanvas) cartOffcanvas.hide(); setTimeout(() => $('#hold_order_note_input').focus(), 400); });
@@ -340,13 +366,12 @@ function bindEvents() {
   // --- Settings ---
   $('#settingsOffcanvas input').off('change').on('change', handleSettingChange);
 
-  console.log("Event bindings complete."); // Log end
+  console.log("Event bindings complete."); 
 }
 
 async function initApplication() {
     console.log("initApplication started.");
     try {
-        // Step 1: Check EOD status first
         console.log("Checking EOD status...");
         const eodStatusResponse = await fetch('./api/check_eod_status.php');
         const eodStatusResult = await eodStatusResponse.json();
@@ -356,24 +381,32 @@ async function initApplication() {
             STATE.unclosedEodDate = eodStatusResult.data.unclosed_date;
             showUnclosedEodOverlay(eodStatusResult.data.unclosed_date);
             console.log("Previous EOD unclosed. Blocking UI.");
-            return; // Block further initialization
+            return; 
         }
         STATE.unclosedEodDate = null;
         console.log("EOD check passed or not required.");
 
-        // Step 2: Fetch essential data
         console.log("Fetching initial data...");
         await fetchInitialData();
         console.log("Initial data fetched (or attempted). STATE after fetch:", JSON.parse(JSON.stringify(STATE)));
 
-        // --- Add check for essential data ---
         if (!STATE.products || STATE.products.length === 0 || !STATE.categories || STATE.categories.length === 0) {
            console.error("Essential data (products or categories) missing after fetchInitialData!");
-           throw new Error("Failed to load product or category data."); // Throw error to trigger catch block
+           throw new Error("Failed to load product or category data.");
         }
         console.log("Essential data check passed.");
+        
+        const opsBody = document.querySelector('#opsOffcanvas .offcanvas-body');
+        if (opsBody) {
+             opsBody.innerHTML = `<div class="row g-3">
+                <div class="col-6 col-md-3"><button class="btn btn-outline-ink w-100 py-3" id="btn_open_shift_end"><i class="bi bi-person-check d-block fs-2 mb-2"></i><span data-i18n="shift_handover">交接班</span></button></div>
+                <div class="col-6 col-md-3"><button class="btn btn-outline-ink w-100 py-3" id="btn_open_txn_query"><i class="bi bi-clock-history d-block fs-2 mb-2"></i><span data-i18n="txn_query">交易查询</span></button></div>
+                <div class="col-6 col-md-3"><button class="btn btn-outline-ink w-100 py-3" id="btn_open_eod"><i class="bi bi-calendar-check d-block fs-2 mb-2"></i><span data-i18n="eod">日结</span></button></div>
+                <div class="col-6 col-md-3"><button class="btn btn-outline-ink w-100 py-3" id="btn_open_holds"><i class="bi bi-inboxes d-block fs-2 mb-2"></i><span data-i18n="holds">挂起单</span></button></div>
+                <div class="col-6 col-md-3"><button class="btn btn-outline-ink w-100 py-3" data-bs-toggle="offcanvas" data-bs-target="#settingsOffcanvas"><i class="bi bi-gear d-block fs-2 mb-2"></i><span data-i18n="settings">设置</span></button></div>
+              </div>`;
+        }
 
-        // Step 3: Initialize UI elements
         console.log("Applying I18N...");
         applyI18N();
         console.log("Updating Member UI...");
@@ -388,8 +421,6 @@ async function initApplication() {
         refreshCartUI();
         console.log("Initializing Print Simulator...");
         initializePrintSimulator();
-
-        // Step 4: Initialize refund modal
         console.log("Initializing Refund Modal...");
         const refundModalEl = document.getElementById('refundConfirmModal');
         if (refundModalEl) {
@@ -401,6 +432,8 @@ async function initApplication() {
         }
 
         console.log("POS Initialized Successfully.");
+
+        await checkShiftStatus();
 
     } catch (error) {
         console.error("Fatal Error during initialization:", error);
@@ -419,5 +452,5 @@ async function initApplication() {
 document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     initApplication();
+    startClock();
 });
-

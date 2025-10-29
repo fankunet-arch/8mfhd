@@ -1,40 +1,59 @@
 <?php
 /**
  * TopTea POS - Submit Order API
- * Revision: 5.2 (Points Accumulation Rule Integration)
- * Patched by Gemini · 2025-10-28
+ * Revision: 5.3 (Shift ID Integration)
+ * Patched by Gemini · 2025-10-29
  */
 
 require_once realpath(__DIR__ . '/../../../pos_backend/core/config.php');
+// SECURE: Enforce session validation, which also starts the session.
+require_once realpath(__DIR__ . '/../../../pos_backend/core/pos_auth_core.php');
 require_once realpath(__DIR__ . '/../../../pos_backend/services/PromotionEngine.php');
 
 header('Content-Type: application/json; charset=utf-8');
 
+/**
+ * Sends a JSON response and terminates the script.
+ */
 function send_json_response($status, $message, $data = null) {
     echo json_encode(['status' => $status, 'message' => $message, 'data' => $data], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+/**
+ * Diagnostic helper function.
+ */
 function diag($msg, $e = null) {
-    $base = 'DIAG_V5.2 :: File: submit_order.php';
+    $base = 'DIAG_V5.3 :: File: submit_order.php';
     if ($e instanceof Throwable) return $base . ' :: Line: ' . $e->getLine() . ' :: ' . $e->getMessage();
     return $base . ' :: ' . $msg;
 }
+
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); send_json_response('error', 'Invalid request method.'); }
 $raw = file_get_contents('php://input');
 $json_data = json_decode($raw, true);
 if (!$json_data || !isset($json_data['cart']) || !is_array($json_data['cart']) || count($json_data['cart']) === 0) { http_response_code(400); send_json_response('error', 'Cart data is missing or empty.'); }
 
+// SECURITY: shift_id MUST come from the trusted session, not the payload.
+$shift_id = (int)($_SESSION['pos_shift_id'] ?? 0);
+if ($shift_id === 0) {
+    http_response_code(403); // Forbidden
+    send_json_response('error', 'No active shift found for the current user. Cannot process order.');
+}
+
+
 try {
-    // Inputs
-    $store_id    = (int)($json_data['store_id'] ?? 1);
-    $user_id     = (int)($json_data['user_id'] ?? 1);
+    // Inputs from session and payload
+    $store_id    = (int)($_SESSION['pos_store_id']);
+    $user_id     = (int)($_SESSION['pos_user_id']);
     $member_id   = isset($json_data['member_id']) ? (int)$json_data['member_id'] : null;
-    $points_redeemed_from_payload = isset($json_data['points_redeemed']) ? (int)$json_data['points_redeemed'] : 0; // Renamed to avoid confusion
+    $points_redeemed_from_payload = isset($json_data['points_redeemed']) ? (int)$json_data['points_redeemed'] : 0;
     $payments    = $json_data['payment']['summary'] ?? [];
     $couponCode  = null;
     foreach (['coupon_code','coupon','code','promo_code','discount_code'] as $k) { if (!empty($json_data[$k])) { $couponCode = trim((string)$json_data[$k]); break; } }
 
+    // Fetch store config
     $stmt_store = $pdo->prepare("SELECT * FROM kds_stores WHERE id = :store_id LIMIT 1");
     $stmt_store->execute([':store_id' => $store_id]);
     $store_config = $stmt_store->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -42,7 +61,7 @@ try {
 
     $vat_rate = isset($store_config['default_vat_rate']) ? (float)$store_config['default_vat_rate'] : 21.0;
 
-    // --- 核心修复 1/3: 读取积分赚取规则 ---
+    // Fetch points earning rule
     $stmt_settings = $pdo->query("SELECT setting_key, setting_value FROM pos_settings WHERE setting_key = 'points_euros_per_point'");
     $settings = $stmt_settings->fetchAll(PDO::FETCH_KEY_PAIR);
     $euros_per_point = isset($settings['points_euros_per_point']) ? (float)$settings['points_euros_per_point'] : 1.0;
@@ -53,9 +72,9 @@ try {
     $promoResult  = $engine->applyPromotions($json_data['cart'], $couponCode);
     $final_total_after_promo = (float)$promoResult['final_total'];
     
-    // SERVER-SIDE POINTS VALIDATION & CALCULATION
+    // Server-side points validation & calculation
     $points_discount_final = 0.0;
-    $points_to_deduct = 0; // Initialize points actually deducted
+    $points_to_deduct = 0;
     if ($member_id && $points_redeemed_from_payload > 0) {
         $stmt_member = $pdo->prepare("SELECT points_balance FROM pos_members WHERE id = ? AND is_active = 1 FOR UPDATE");
         $stmt_member->execute([$member_id]);
@@ -64,7 +83,6 @@ try {
         if ($member) {
             $current_points = (float)$member['points_balance'];
             $max_possible_discount = $final_total_after_promo;
-            // Rule: 100 points = 1 EUR
             $max_points_for_discount = floor($max_possible_discount * 100);
             
             $points_to_deduct = min($points_redeemed_from_payload, $current_points, $max_points_for_discount);
@@ -72,10 +90,10 @@ try {
             if ($points_to_deduct > 0) {
                 $points_discount_final = floor($points_to_deduct) / 100.0;
             } else {
-                $points_to_deduct = 0; // Reset if calculation leads to zero
+                $points_to_deduct = 0;
             }
         } else {
-            $points_to_deduct = 0; // Member not found, no deduction
+            $points_to_deduct = 0;
         }
     }
     
@@ -84,7 +102,7 @@ try {
     $discount_amount = (float)$promoResult['discount_amount'] + $points_discount_final;
     $payment_summary = $json_data['payment'];
 
-    // ... (Compliance logic remains unchanged) ...
+    // Compliance logic
     $compliance_system = $store_config['billing_system'] ?? null;
     $compliance_data   = null;
     $qr_payload        = null;
@@ -117,17 +135,17 @@ try {
 
     $pdo->beginTransaction();
 
-    // 1. Create Invoice
+    // 1. Create Invoice with shift_id
     $issued_at = date('Y-m-d H:i:s');
     $taxable_base = round($final_total / (1 + ($vat_rate / 100)), 2);
     $vat_amount = $final_total - $taxable_base;
 
     $stmt_invoice = $pdo->prepare("
-        INSERT INTO pos_invoices (invoice_uuid, store_id, user_id, issuer_nif, series, `number`, issued_at, invoice_type, taxable_base, vat_amount, discount_amount, final_total, status, compliance_system, compliance_data, payment_summary)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO pos_invoices (invoice_uuid, store_id, user_id, shift_id, issuer_nif, series, `number`, issued_at, invoice_type, taxable_base, vat_amount, discount_amount, final_total, status, compliance_system, compliance_data, payment_summary)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt_invoice->execute([
-        bin2hex(random_bytes(16)), $store_id, $user_id, $store_config['tax_id'], $series, $invoice_number, $issued_at, 'F2', $taxable_base, $vat_amount, $discount_amount, $final_total, 'ISSUED', $compliance_system, json_encode($compliance_data), json_encode($payment_summary)
+        bin2hex(random_bytes(16)), $store_id, $user_id, $shift_id, $store_config['tax_id'], $series, $invoice_number, $issued_at, 'F2', $taxable_base, $vat_amount, $discount_amount, $final_total, 'ISSUED', $compliance_system, json_encode($compliance_data), json_encode($payment_summary)
     ]);
     $invoice_id = (int)$pdo->lastInsertId();
 
@@ -155,9 +173,8 @@ try {
         ]);
     }
 
-    // --- MEMBER POINTS LOGIC (ACCUMULATION & REDEMPTION) ---
+    // 3. Member Points Logic (Accumulation & Redemption)
     if ($member_id) {
-        // --- DEDUCTION LOGIC ---
         if ($points_to_deduct > 0 && $points_discount_final > 0) {
             $stmt_deduct_points = $pdo->prepare("UPDATE pos_members SET points_balance = points_balance - ? WHERE id = ?");
             $stmt_deduct_points->execute([$points_to_deduct, $member_id]);
@@ -169,15 +186,12 @@ try {
             $stmt_log_deduction->execute([$member_id, $invoice_id, -$points_to_deduct, 'REDEEM_DISCOUNT', "兑换抵扣 {$points_discount_final} EUR", $user_id]);
         }
         
-        // --- ACCUMULATION LOGIC ---
         if ($final_total > 0) {
-            // --- 核心修复 2/3: 使用后台配置的比例计算积分 ---
             $points_to_add = floor($final_total / $euros_per_point); 
             if ($points_to_add > 0) {
                 $stmt_add_points = $pdo->prepare("UPDATE pos_members SET points_balance = points_balance + ? WHERE id = ?");
                 $stmt_add_points->execute([$points_to_add, $member_id]);
 
-                // --- 核心修复 3/3: 记录日志时使用正确的积分数 ---
                 $stmt_log_addition = $pdo->prepare("
                     INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, user_id)
                     VALUES (?, ?, ?, ?, ?)
@@ -186,8 +200,7 @@ try {
             }
         }
     }
-    // --- MEMBER POINTS LOGIC END ---
-
+    
     $pdo->commit();
 
     $resp = [

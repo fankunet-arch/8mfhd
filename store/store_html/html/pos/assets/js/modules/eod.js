@@ -355,7 +355,7 @@ export async function submitEodReportFinal(){
 }
 
 /**
- * --- CORE ADDITION: Handle EOD Report Printing ---
+ * --- CORE ADDITION & FIX: Handle EOD Report Printing ---
  */
 export async function handlePrintEodReport() {
     if (!currentReportId) {
@@ -374,9 +374,29 @@ export async function handlePrintEodReport() {
         if (!template) {
             throw new Error(safeT('print_template_missing', '找不到对应的打印模板'));
         }
+        
+        // --- START: Z-INDEX FIX V2 ---
+        const eodModal = document.getElementById('eodSummaryModal');
+        const eodModalDialog = eodModal ? eodModal.querySelector('.modal-dialog') : null;
+        const printModalEl = document.getElementById('printPreviewModal');
 
-        // 3. Call the print function (from print.js or utils.js)
+        // 1. Temporarily lower the EOD modal's z-index so the print preview can appear on top.
+        if (eodModal) {
+            eodModal.style.zIndex = '1050'; // Lower than a standard modal (1055)
+        }
+
+        // 2. We need to restore the EOD modal's z-index once the print modal is closed.
+        if (printModalEl) {
+            printModalEl.addEventListener('hidden.bs.modal', () => {
+                // Restore the original high z-indexes so the EOD modal is interactive again.
+                if (eodModal) eodModal.style.zIndex = '1060';
+                if (eodModalDialog) eodModalDialog.style.zIndex = '1062'; // Re-assert this just in case
+            }, { once: true }); // The listener should only fire once
+        }
+        
+        // 3. Call the print function which will show the new modal at a higher z-index
         await printReceipt(reportData, template);
+        // --- END: Z-INDEX FIX V2 ---
 
     } catch (error) {
         console.error('EOD Print Error:', error);

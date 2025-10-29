@@ -1,31 +1,25 @@
 import { t, fmtEUR, toast } from '../utils.js';
-// --- CORE ADDITION: Import STATE for potential future use (e.g., permissions check) ---
 import { STATE } from '../state.js';
 
-// --- CORE ADDITION: Define confirmation modal instance (to be initialized in main.js) ---
 let refundConfirmModal = null;
-let currentActionContext = null; // To store { actionType: 'cancel'/'correct', invoiceId: xxx }
+let currentActionContext = null; 
 
-// --- CORE ADDITION: Initialize confirmation modal ---
 export function initializeRefundModal(modalInstance) {
     refundConfirmModal = modalInstance;
     const confirmButton = document.getElementById('btn_confirm_refund_action');
     if (confirmButton) {
         confirmButton.addEventListener('click', () => {
             if (currentActionContext) {
-                // In a real scenario, call the appropriate backend API here
                 console.log(`Confirmed action: ${currentActionContext.actionType} for invoice ID: ${currentActionContext.invoiceId}`);
-                toast(`模拟操作：${currentActionContext.actionType === 'cancel' ? t('cancel_invoice') : t('correct_invoice')} (ID: ${currentActionContext.invoiceId})`); // Simulate action
+                toast(`模拟操作：${currentActionContext.actionType === 'cancel' ? t('cancel_invoice') : t('correct_invoice')} (ID: ${currentActionContext.invoiceId})`); 
                 refundConfirmModal.hide();
-                // Optionally refresh the list or close the detail modal
                 bootstrap.Modal.getInstance(document.getElementById('txnDetailModal'))?.hide();
-                refreshTxnList(); // Refresh list after action
+                refreshTxnList(); 
             }
         });
     }
 }
 
-// --- CORE ADDITION: Function to open confirmation modal ---
 function requestRefundActionConfirmation(actionType, invoiceId, invoiceNumber) {
     if (!refundConfirmModal) {
         toast('错误：确认模态框未初始化');
@@ -92,7 +86,21 @@ function setupDatePickers() {
     startDateInput.addEventListener('change', updateDateLimits);
     endDateInput.addEventListener('change', updateStartDateLimits);
 
-    // Initial setup
+    // --- START: CLICK-TO-OPEN-PICKER FIX ---
+    const triggerPicker = (e) => {
+        try {
+            // This is the standard method to programmatically open the picker
+            e.target.showPicker();
+        } catch (error) {
+            // showPicker() might not be supported in some older browsers.
+            // In those cases, the default browser behavior will have to suffice.
+            console.warn('Element.showPicker() is not supported in this browser.');
+        }
+    };
+    startDateInput.addEventListener('click', triggerPicker);
+    endDateInput.addEventListener('click', triggerPicker);
+    // --- END: CLICK-TO-OPEN-PICKER FIX ---
+
     updateDateLimits();
     updateStartDateLimits();
 }
@@ -104,7 +112,7 @@ function validateDateRange() {
     const endDate = endDateInput.value;
 
     if (!startDate || !endDate) {
-        toast(t('validation_select_dates')); // Use translation key
+        toast(t('validation_select_dates'));
         return false;
     }
 
@@ -126,7 +134,7 @@ function validateDateRange() {
     const diffTime = Math.abs(selectedEndDate - selectedStartDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 31) { // Loosen to 31 days to be safe
+    if (diffDays > 31) { 
         toast(t('validation_date_range_too_large'));
         return false;
     }
@@ -195,7 +203,11 @@ async function refreshTxnList() {
 
     try {
         const response = await fetch(apiUrl);
+        if (!response.ok) { // Catches network-level errors (e.g., 404, 500)
+            throw new Error(`Server error: ${response.statusText}`);
+        }
         const result = await response.json();
+        
         if (result.status === 'success') {
             if (!result.data || result.data.length === 0) {
                 listTarget.innerHTML = `<div class="alert alert-sheet m-3">${t('no_transactions')}</div>`;
@@ -203,8 +215,7 @@ async function refreshTxnList() {
             }
             let html = '<div class="list-group list-group-flush">';
             result.data.forEach(txn => {
-                // Ensure issued_at is treated as local time for display
-                const localTime = txn.issued_at.replace(' ', 'T'); // Make it ISO-like for Date constructor robustness
+                const localTime = txn.issued_at.replace(' ', 'T'); 
                 const time = new Date(localTime).toLocaleString(STATE.lang === 'zh' ? 'zh-CN' : 'es-ES', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
                 const statusClass = txn.status === 'CANCELLED' ? 'text-danger' : '';
                 const statusText = txn.status === 'CANCELLED' ? `(${t('cancelled')})` : '';
@@ -213,8 +224,16 @@ async function refreshTxnList() {
             });
             html += '</div>';
             listTarget.innerHTML = html;
-        } else { throw new Error(result.message); }
-    } catch (error) { listTarget.innerHTML = `<div class="alert alert-danger m-3">${error.message}</div>`; }
+        } else { 
+            // Catches application-level errors (status: 'error')
+            throw new Error(result.message || 'Failed to load transactions'); 
+        }
+    } catch (error) { 
+        // Uniformly handles all errors and displays them in the UI
+        console.error("Failed to refresh transaction list:", error);
+        listTarget.innerHTML = `<div class="alert alert-danger m-3">${error.message}</div>`;
+        toast(`Error: ${error.message}`); // Also show a toast notification
+    }
 }
 
 export async function showTxnDetails(id) {
@@ -222,12 +241,11 @@ export async function showTxnDetails(id) {
     const detailModal = new bootstrap.Modal(detailModalEl);
     const modalTitleEl = document.getElementById('txn_detail_title');
     const modalBodyEl = document.getElementById('txn_detail_body');
-    // --- CORE ADDITION: Get footer element ---
     const modalFooterEl = document.getElementById('txn_detail_footer');
 
-    modalTitleEl.textContent = `${t('loading')}...`; // Use translation key
+    modalTitleEl.textContent = `${t('loading')}...`;
     modalBodyEl.innerHTML = '<div class="text-center p-4"><div class="spinner-border"></div></div>';
-    modalFooterEl.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t('close')}</button>`; // Default close button
+    modalFooterEl.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t('close')}</button>`;
     detailModal.show();
 
     try {
@@ -245,7 +263,6 @@ export async function showTxnDetails(id) {
             });
 
             const statusBadge = `<span class="badge text-bg-${d.status === 'CANCELLED' ? 'danger':'success'}">${t(d.status.toLowerCase())}</span>`;
-            // Ensure issued_at is treated as local time
             const localTime = d.issued_at.replace(' ', 'T');
             const timeDisplay = new Date(localTime).toLocaleString(STATE.lang === 'zh' ? 'zh-CN' : 'es-ES', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -272,7 +289,6 @@ export async function showTxnDetails(id) {
             modalTitleEl.textContent = `${t('invoice_details')}: ${invoiceNumber}`;
             modalBodyEl.innerHTML = bodyHtml;
 
-            // --- CORE ADDITION: Add action buttons based on status ---
             let footerHtml = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t('close')}</button>`;
             if (d.status === 'ISSUED') {
                 footerHtml += `
@@ -286,69 +302,9 @@ export async function showTxnDetails(id) {
             }
             modalFooterEl.innerHTML = footerHtml;
 
-
         } else { throw new Error(result.message); }
     } catch (error) {
         modalBodyEl.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
         modalFooterEl.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${t('close')}</button>`;
     }
 }
-
-// Add necessary I18N strings (should be done in state.js ideally)
-// Example additions:
-/*
-I18N.zh = {
-    ...I18N.zh,
-    cancel_invoice: '作废此单',
-    correct_invoice: '开具更正票据',
-    confirm_cancel_invoice_title: '确认作废票据',
-    confirm_cancel_invoice_body: '您确定要作废票据 {invoiceNumber} 吗？此操作不可逆。',
-    confirm_cancel_invoice_confirm: '确认作废',
-    confirm_correct_invoice_title: '确认开具更正票据',
-    confirm_correct_invoice_body: '为票据 {invoiceNumber} 开具更正票据？请在 HQ 后台完成后续操作。',
-    confirm_correct_invoice_confirm: '确认开具',
-    loading: '加载中',
-    time: '时间',
-    cashier: '收银员',
-    status: '状态',
-    item_list: '商品列表',
-    item: '商品',
-    qty: '数量',
-    unit_price: '单价',
-    total_price: '总价',
-    no_items: '无商品',
-    subtotal: '税前',
-    vat: '税额',
-    total: '总计',
-    invoice_details: '票据详情',
-    close: '关闭',
-    validation_select_dates: '请选择起始和截止日期'
-};
-I18N.es = {
-     ...I18N.es,
-    cancel_invoice: 'Anular Ticket',
-    correct_invoice: 'Factura Rectificativa',
-    confirm_cancel_invoice_title: 'Confirmar Anulación',
-    confirm_cancel_invoice_body: '¿Seguro que desea anular el ticket {invoiceNumber}? Esta acción es irreversible.',
-    confirm_cancel_invoice_confirm: 'Confirmar Anulación',
-    confirm_correct_invoice_title: 'Confirmar Factura Rectificativa',
-    confirm_correct_invoice_body: '¿Emitir factura rectificativa para el ticket {invoiceNumber}? Complete la operación en el HQ.',
-    confirm_correct_invoice_confirm: 'Confirmar Emisión',
-    loading: 'Cargando',
-    time: 'Hora',
-    cashier: 'Cajero',
-    status: 'Estado',
-    item_list: 'Lista de artículos',
-    item: 'Artículo',
-    qty: 'Cant.',
-    unit_price: 'P. Unit.',
-    total_price: 'Total',
-    no_items: 'Sin artículos',
-    subtotal: 'Base Imp.',
-    vat: 'IVA',
-    total: 'Total',
-    invoice_details: 'Detalles del Ticket',
-    close: 'Cerrar',
-    validation_select_dates: 'Por favor, seleccione las fechas de inicio y fin'
-};
-*/
