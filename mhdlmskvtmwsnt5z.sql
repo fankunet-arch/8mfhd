@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： mhdlmskvtmwsnt5z.mysql.db
--- 生成日期： 2025-10-29 01:12:06
+-- 生成日期： 2025-10-29 13:21:42
 -- 服务器版本： 8.4.6-6
 -- PHP 版本： 8.1.33
 
@@ -72,7 +72,7 @@ CREATE TABLE `cpsys_users` (
 --
 
 INSERT INTO `cpsys_users` (`id`, `username`, `password_hash`, `email`, `display_name`, `is_active`, `role_id`, `last_login_at`, `created_at`, `updated_at`, `deleted_at`) VALUES
-(1, 'toptea_admin', '9b70757328316b184abb8e7ecffad4e3be9b6ba0bb2fb16890edebc2c50ebd1a', 'admin2@toptea.es', 'Toptea Admin2', 1, 1, '2025-10-28 18:37:42', '2025-10-22 19:43:58', '2025-10-28 18:37:42', NULL),
+(1, 'toptea_admin', '9b70757328316b184abb8e7ecffad4e3be9b6ba0bb2fb16890edebc2c50ebd1a', 'admin2@toptea.es', 'Toptea Admin2', 1, 1, '2025-10-29 11:05:28', '2025-10-22 19:43:58', '2025-10-29 11:05:28', NULL),
 (2, 'product_manager', '9b70757328316b184abb8e7ecffad4e3be9b6ba0bb2fb16890edebc2c50ebd1a', 'admin@toptea.es', '产品经理 A2', 1, 2, '2025-10-23 13:19:05', '2025-10-23 12:51:19', '2025-10-23 16:24:52', NULL);
 
 -- --------------------------------------------------------
@@ -737,7 +737,7 @@ CREATE TABLE `pos_eod_reports` (
 --
 
 INSERT INTO `pos_eod_reports` (`id`, `store_id`, `user_id`, `report_date`, `executed_at`, `transactions_count`, `system_gross_sales`, `system_discounts`, `system_net_sales`, `system_tax`, `system_cash`, `system_card`, `system_platform`, `counted_cash`, `cash_discrepancy`, `notes`) VALUES
-(2, 1, 1, '2025-10-28', '2025-10-28 20:36:49', 1, 5.00, 0.50, 4.50, 0.41, 4.50, 0.00, 0.00, 5.00, 0.50, NULL);
+(5, 1, 1, '2025-10-28', '2025-10-29 02:32:41', 2, 9.00, 6.00, 9.00, 0.82, 6.50, 2.50, 0.00, 4.00, -2.50, '');
 
 -- --------------------------------------------------------
 
@@ -1006,6 +1006,35 @@ CREATE TABLE `pos_point_redemption_rules` (
 
 INSERT INTO `pos_point_redemption_rules` (`id`, `rule_name_zh`, `rule_name_es`, `points_required`, `reward_type`, `reward_value_decimal`, `reward_promo_id`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
 (1, '2欧优惠券', '2euro menos', 60, 'DISCOUNT_AMOUNT', 2.00, NULL, 1, '2025-10-28 20:14:45', '2025-10-28 20:14:45', NULL);
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `pos_print_templates`
+--
+
+DROP TABLE IF EXISTS `pos_print_templates`;
+CREATE TABLE `pos_print_templates` (
+  `id` int NOT NULL,
+  `store_id` int UNSIGNED DEFAULT NULL COMMENT '所属门店ID, NULL表示全局通用',
+  `template_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '模板名称 (e.g., Z-Out Report, Customer Receipt)',
+  `template_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '模板类型 (e.g., EOD_REPORT, RECEIPT, KITCHEN_ORDER)',
+  `template_content` json NOT NULL COMMENT '模板布局和内容的JSON定义',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='POS打印模板配置表';
+
+--
+-- 转存表中的数据 `pos_print_templates`
+--
+
+INSERT INTO `pos_print_templates` (`id`, `store_id`, `template_name`, `template_type`, `template_content`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, NULL, '默认门店日结报告模板', 'EOD_REPORT', '[{\"size\": \"double\", \"type\": \"text\", \"align\": \"center\", \"value\": \"**TopTea Daily Report**\"}, {\"type\": \"divider\"}, {\"key\": \"报告日期\", \"type\": \"kv\", \"value\": \"{report_date}\"}, {\"key\": \"门店\", \"type\": \"kv\", \"value\": \"{store_name}\"}, {\"key\": \"执行人\", \"type\": \"kv\", \"value\": \"{user_name}\"}, {\"key\": \"打印时间\", \"type\": \"kv\", \"value\": \"{print_time}\"}, {\"char\": \"-\", \"type\": \"divider\"}, {\"type\": \"header\", \"value\": \"销售总览\"}, {\"key\": \"交易笔数\", \"type\": \"kv\", \"value\": \"{transactions_count}\"}, {\"key\": \"净销售额\", \"type\": \"kv\", \"value\": \"€{system_net_sales}\"}, {\"char\": \"-\", \"type\": \"divider\"}, {\"type\": \"header\", \"value\": \"收款方式汇总\"}, {\"key\": \"系统现金\", \"type\": \"kv\", \"value\": \"€{system_cash}\"}, {\"key\": \"系统刷卡\", \"type\": \"kv\", \"value\": \"€{system_card}\"}, {\"key\": \"系统平台\", \"type\": \"kv\", \"value\": \"€{system_platform}\"}, {\"char\": \"-\", \"type\": \"divider\"}, {\"type\": \"header\", \"value\": \"现金核对\"}, {\"key\": \"清点现金\", \"type\": \"kv\", \"value\": \"€{counted_cash}\"}, {\"key\": \"现金差异\", \"type\": \"kv\", \"value\": \"€{cash_discrepancy}\", \"bold_value\": true}, {\"type\": \"divider\"}, {\"type\": \"text\", \"align\": \"left\", \"value\": \"签名 / Signature:\"}, {\"type\": \"feed\", \"lines\": 3}, {\"type\": \"cut\"}]', 1, '2025-10-29 01:00:00', '2025-10-29 01:00:00'),
+(2, NULL, '默认顾客小票模板', 'RECEIPT', '[{\"size\": \"double\", \"type\": \"text\", \"align\": \"center\", \"value\": \"**{store_name}**\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"{store_address}\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"NIF: {store_tax_id}\"}, {\"type\": \"divider\"}, {\"key\": \"票号 (Nº)\", \"type\": \"kv\", \"value\": \"{invoice_number}\"}, {\"key\": \"收银员\", \"type\": \"kv\", \"value\": \"{cashier_name}\"}, {\"key\": \"时间\", \"type\": \"kv\", \"value\": \"{issued_at}\"}, {\"type\": \"divider\"}, {\"type\": \"items_header\"}, {\"type\": \"items_loop\", \"content\": [{\"type\": \"item_line\"}, {\"type\": \"item_customizations\"}]}, {\"type\": \"divider\"}, {\"key\": \"小计\", \"type\": \"kv\", \"value\": \"€{subtotal}\"}, {\"key\": \"折扣\", \"type\": \"kv\", \"value\": \"-€{discount_amount}\"}, {\"key\": \"总计\", \"type\": \"kv\", \"value\": \"€{final_total}\", \"bold_value\": true}, {\"type\": \"divider\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"Gracias por su visita\"}, {\"type\": \"qr_code\", \"value\": \"{qr_code}\"}, {\"type\": \"feed\", \"lines\": 3}, {\"type\": \"cut\"}]', 1, '2025-10-29 11:19:00', '2025-10-29 11:19:00'),
+(3, NULL, '默认厨房出品单模板', 'KITCHEN_ORDER', '[{\"size\": \"double\", \"type\": \"text\", \"align\": \"center\", \"value\": \"**NUEVO PEDIDO**\"}, {\"type\": \"divider\"}, {\"key\": \"票号\", \"type\": \"kv\", \"value\": \"{invoice_number}\"}, {\"key\": \"时间\", \"type\": \"kv\", \"value\": \"{issued_at}\"}, {\"char\": \"-\", \"type\": \"divider\"}, {\"type\": \"items_loop\", \"content\": [{\"type\": \"item_line\", \"show_price\": false}, {\"type\": \"item_customizations\", \"bold_value\": true}]}, {\"type\": \"divider\"}, {\"type\": \"feed\", \"lines\": 3}, {\"type\": \"cut\"}]', 1, '2025-10-29 11:19:00', '2025-10-29 11:19:00'),
+(4, NULL, '默认顾客小票模板', 'RECEIPT', '[{\"size\": \"double\", \"type\": \"text\", \"align\": \"center\", \"value\": \"**{store_name}**\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"{store_address}\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"NIF: {store_tax_id}\"}, {\"type\": \"divider\"}, {\"key\": \"票号 (Nº)\", \"type\": \"kv\", \"value\": \"{invoice_number}\"}, {\"key\": \"收银员\", \"type\": \"kv\", \"value\": \"{cashier_name}\"}, {\"key\": \"时间\", \"type\": \"kv\", \"value\": \"{issued_at}\"}, {\"type\": \"divider\"}, {\"type\": \"items_header\"}, {\"type\": \"items_loop\", \"content\": [{\"type\": \"item_line\"}, {\"type\": \"item_customizations\"}]}, {\"type\": \"divider\"}, {\"key\": \"小计\", \"type\": \"kv\", \"value\": \"€{subtotal}\"}, {\"key\": \"折扣\", \"type\": \"kv\", \"value\": \"-€{discount_amount}\"}, {\"key\": \"总计\", \"type\": \"kv\", \"value\": \"€{final_total}\", \"bold_value\": true}, {\"type\": \"divider\"}, {\"type\": \"text\", \"align\": \"center\", \"value\": \"Gracias por su visita\"}, {\"type\": \"qr_code\", \"value\": \"{qr_code}\"}, {\"type\": \"feed\", \"lines\": 3}, {\"type\": \"cut\"}]', 1, '2025-10-29 11:44:34', '2025-10-29 11:44:34'),
+(5, NULL, '默认厨房出品单模板', 'KITCHEN_ORDER', '[{\"size\": \"double\", \"type\": \"text\", \"align\": \"center\", \"value\": \"**NUEVO PEDIDO**\"}, {\"type\": \"divider\"}, {\"key\": \"票号\", \"type\": \"kv\", \"value\": \"{invoice_number}\"}, {\"key\": \"时间\", \"type\": \"kv\", \"value\": \"{issued_at}\"}, {\"char\": \"-\", \"type\": \"divider\"}, {\"type\": \"items_loop\", \"content\": [{\"type\": \"item_line\", \"show_price\": false}, {\"type\": \"item_customizations\", \"bold_value\": true}]}, {\"type\": \"divider\"}, {\"type\": \"feed\", \"lines\": 3}, {\"type\": \"cut\"}]', 1, '2025-10-29 11:44:34', '2025-10-29 11:44:34');
 
 -- --------------------------------------------------------
 
@@ -1359,6 +1388,13 @@ ALTER TABLE `pos_point_redemption_rules`
   ADD KEY `reward_promo_id` (`reward_promo_id`);
 
 --
+-- 表的索引 `pos_print_templates`
+--
+ALTER TABLE `pos_print_templates`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_store_type` (`store_id`,`template_type`);
+
+--
 -- 表的索引 `pos_promotions`
 --
 ALTER TABLE `pos_promotions`
@@ -1530,7 +1566,7 @@ ALTER TABLE `pos_coupons`
 -- 使用表AUTO_INCREMENT `pos_eod_reports`
 --
 ALTER TABLE `pos_eod_reports`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- 使用表AUTO_INCREMENT `pos_held_orders`
@@ -1591,6 +1627,12 @@ ALTER TABLE `pos_menu_items`
 --
 ALTER TABLE `pos_point_redemption_rules`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- 使用表AUTO_INCREMENT `pos_print_templates`
+--
+ALTER TABLE `pos_print_templates`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- 使用表AUTO_INCREMENT `pos_promotions`

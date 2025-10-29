@@ -2,16 +2,14 @@
 /**
  * Toptea HQ - cpsys
  * Main Layout File
- * Engineer: Gemini | Date: 2025-10-28 | Revision: 12.6 (Redemption Rules Link)
+ * Engineer: Gemini | Date: 2025-10-29 | Revision: 12.8 (Print Template Variables Link)
  */
 $page_title = $page_title ?? 'TopTea HQ';
-$page = $_GET['page'] ?? 'dashboard'; // Ensure $page is always defined
+$page = $_GET['page'] ?? 'dashboard';
 
-// Define page groups for parent menu highlighting and collapse control
-// --- 核心修复：确保 pos_point_redemption_rules 在 $posPages 数组中 ---
 $posPages = ['pos_menu_management', 'pos_variants_management', 'pos_category_management', 'pos_invoice_list', 'pos_invoice_detail', 'pos_promotion_management', 'pos_eod_reports', 'pos_member_level_management', 'pos_member_management', 'pos_member_settings', 'pos_point_redemption_rules'];
 $dictionaryPages = ['cup_management', 'material_management', 'unit_management', 'ice_option_management', 'sweetness_option_management'];
-$systemPages = ['user_management', 'store_management', 'kds_user_management'];
+$systemPages = ['user_management', 'store_management', 'kds_user_management', 'pos_print_template_management', 'pos_print_template_variables'];
 $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_view'];
 ?>
 <!DOCTYPE html>
@@ -67,7 +65,6 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_member_level_management') ? 'active' : ''; ?>" href="index.php?page=pos_member_level_management">会员等级管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_member_management') ? 'active' : ''; ?>" href="index.php?page=pos_member_management">会员列表管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_member_settings') ? 'active' : ''; ?>" href="index.php?page=pos_member_settings">会员积分设置</a></li>
-                                <!-- 核心修复：确保此链接存在 -->
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_point_redemption_rules') ? 'active' : ''; ?>" href="index.php?page=pos_point_redemption_rules">积分兑换规则</a></li>
                             </ul>
                         </div>
@@ -89,8 +86,9 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                         <div class="collapse <?php echo (in_array($page, $systemPages)) ? 'show' : ''; ?>" id="system-submenu">
                              <ul class="nav flex-column ps-4">
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'user_management') ? 'active' : ''; ?>" href="index.php?page=user_management">用户管理</a></li>
-                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'kds_user_management') ? 'active' : ''; ?>" href="index.php?page=kds_user_management">KDS用户管理</a></li>
-                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'store_management') ? 'active' : ''; ?>" href="index.php?page=store_management">门店管理</a></li>
+                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'store_management' || $page === 'kds_user_management') ? 'active' : ''; ?>" href="index.php?page=store_management">门店管理</a></li>
+                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_print_template_management') ? 'active' : ''; ?>" href="index.php?page=pos_print_template_management">打印模板管理</a></li>
+                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_print_template_variables') ? 'active' : ''; ?>" href="index.php?page=pos_print_template_variables">模板可用变量</a></li>
                             </ul>
                         </div>
                     </li>
@@ -121,7 +119,6 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                     if (isset($content_view) && file_exists($content_view)) {
                         include $content_view;
                     } else {
-                        // More specific error message
                         $error_msg = 'Error: Content view file not found';
                         if (isset($content_view)) {
                              $error_msg .= ' at path: ' . htmlspecialchars($content_view);
@@ -144,4 +141,3 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
     <?php endif; ?>
 </body>
 </html>
-

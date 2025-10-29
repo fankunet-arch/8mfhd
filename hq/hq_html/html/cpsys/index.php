@@ -2,12 +2,12 @@
 /**
  * Toptea HQ - cpsys
  * Main Entry Point
- * Engineer: Gemini | Date: 2025-10-28 | Revision: 12.6 (Redemption Rules Route)
+ * Engineer: Gemini | Date: 2025-10-29 | Revision: 12.9 (Load Default Templates for Variables Page)
  */
 require_once realpath(__DIR__ . '/../../core/auth_core.php');
 header('Content-Type: text/html; charset=utf-8');
 require_once realpath(__DIR__ . '/../../core/config.php');
-require_once APP_PATH . '/helpers/kds_helper.php'; // Includes redemption rule functions now
+require_once APP_PATH . '/helpers/kds_helper.php';
 require_once APP_PATH . '/helpers/auth_helper.php';
 
 if (!isset($pdo)) {
@@ -21,7 +21,6 @@ if (($_SESSION['role_id'] ?? null) !== ROLE_SUPER_ADMIN && !in_array($page, ['da
      $page = 'access_denied';
 }
 
-// Function to get redemption rules (moved here for route)
 function getAllRedemptionRules(PDO $pdo): array {
     $sql = "SELECT r.*, p.promo_name 
             FROM pos_point_redemption_rules r
@@ -32,12 +31,24 @@ function getAllRedemptionRules(PDO $pdo): array {
         $stmt = $pdo->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
-        // Handle case where table might not exist yet during initial setup
-        if ($e->getCode() == '42S02') { // Base table or view not found
+        if ($e->getCode() == '42S02') { 
              error_log("Warning: pos_point_redemption_rules table not found when fetching rules for routing. " . $e->getMessage());
-             return []; // Return empty array to avoid breaking the page load
+             return [];
         }
-        throw $e; // Re-throw other errors
+        throw $e;
+    }
+}
+
+function getAllPrintTemplates(PDO $pdo): array {
+    try {
+        $stmt = $pdo->query("SELECT * FROM pos_print_templates ORDER BY template_type, template_name ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        if ($e->getCode() == '42S02') {
+             error_log("Warning: pos_print_templates table not found. " . $e->getMessage());
+             return [];
+        }
+        throw $e;
     }
 }
 
@@ -195,15 +206,31 @@ switch ($page) {
         $page_js = 'pos_member_settings.js'; 
         break;
 
-    // --- 核心修复：确保路由存在 ---
     case 'pos_point_redemption_rules':
         $page_title = 'POS 管理 - 积分兑换规则';
-        $rules = getAllRedemptionRules($pdo); // Fetch rules for the view
-        $promotions_for_select = getAllPromotions($pdo); // For the reward dropdown in the form
+        $rules = getAllRedemptionRules($pdo);
+        $promotions_for_select = getAllPromotions($pdo);
         $content_view = APP_PATH . '/views/cpsys/pos_point_redemption_rules_view.php';
-        $page_js = 'pos_point_redemption_rules.js'; // Requires a new JS file
+        $page_js = 'pos_point_redemption_rules.js';
         break;
-    // --- End Route Fix ---
+
+    case 'pos_print_template_management':
+        $page_title = '系统设置 - 打印模板管理';
+        $templates = getAllPrintTemplates($pdo);
+        $content_view = APP_PATH . '/views/cpsys/pos_print_template_management_view.php';
+        $page_js = 'pos_print_template_management.js';
+        break;
+        
+    case 'pos_print_template_variables':
+        $page_title = '系统设置 - 打印模板变量';
+        // **核心修复**: 从数据库加载默认模板
+        $default_templates = [];
+        $stmt = $pdo->query("SELECT template_type, template_content FROM pos_print_templates WHERE store_id IS NULL AND is_active = 1");
+        while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $default_templates[$row['template_type']] = $row['template_content'];
+        }
+        $content_view = APP_PATH . '/views/cpsys/pos_print_template_variables_view.php';
+        break;
 
     // ... [Dictionary and System Settings cases remain unchanged] ...
     case 'cup_management':
@@ -283,28 +310,21 @@ switch ($page) {
     default:
         http_response_code(404);
         $page_title = '页面未找到';
-        $content_view = null; // Set to null to trigger error message below
-        // Fall through intentional to use the layout's error handling
+        $content_view = null;
 }
 
 // --- Render Layout ---
 if (isset($content_view) || $page === 'access_denied' || http_response_code() === 404) {
     if ($page !== 'access_denied' && http_response_code() !== 404 && (!isset($content_view) || !file_exists($content_view))) {
-         // If a known page has a missing view file, set a specific error view
          $page_title = '错误';
-         $content_view = APP_PATH . '/views/cpsys/error_view.php'; // Assuming you have/create an error view
-         // You might want to pass the expected view path to the error view for debugging
+         $content_view = APP_PATH . '/views/cpsys/error_view.php';
          $error_details = 'Expected view file not found: ' . ($content_view ?? 'N/A');
     } elseif (http_response_code() === 404 && !isset($content_view)) {
-         // Handle 404 specifically if no content view was set by the switch
          $page_title = '页面未找到';
-         $content_view = APP_PATH . '/views/cpsys/404_view.php'; // Assuming you have/create a 404 view
+         $content_view = APP_PATH . '/views/cpsys/404_view.php';
     }
-    // Now include the main layout which handles displaying the content_view or error view
     include APP_PATH . '/views/cpsys/layouts/main.php';
 
 } else {
-    // This case should ideally not be reached if default handles 404 correctly
     die("Critical Error: No view file determined and not a recognized error state.");
 }
-
