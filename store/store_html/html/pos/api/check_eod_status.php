@@ -1,9 +1,9 @@
 <?php
 /**
- * POS · EOD 状态检测（稳健版）
- * - 按“昨日业务日”(Europe/Madrid) 判断是否已结
- * - 优先匹配 report_json.business_date，其次 created_at ∈ 昨日UTC区间
- * - 不依赖 information_schema/CONVERT_TZ
+ * POS · EOD 状态检测 (稳健版 V2)
+ * - 仅检查“昨日业务日”(Europe/Madrid) 是否已结。
+ * - 这是一个简化的检查，依赖于 EOD 处理器能正确处理补结日期。
+ * - 不依赖 CONVERT_TZ。
  */
 header('Content-Type: application/json; charset=utf-8');
 
@@ -14,69 +14,62 @@ try {
     }
 
     $tzMadrid = new DateTimeZone('Europe/Madrid');
-    $utc      = new DateTimeZone('UTC');
+    $utc = new DateTimeZone('UTC');
 
-    $yesterday = (new DateTime('yesterday', $tzMadrid))->format('Y-m-d');
+    // 我们要检查的日期是“昨天”（相对于马德里时区）
+    $yesterday_date_str = (new DateTime('yesterday', $tzMadrid))->format('Y-m-d');
 
-    // 昨日业务日窗口（UTC）
-    $bd_start_utc = (new DateTime($yesterday.' 00:00:00', $tzMadrid))->setTimezone($utc)->format('Y-m-d H:i:s');
-    $bd_end_utc   = (new DateTime($yesterday.' 23:59:59', $tzMadrid))->setTimezone($utc)->format('Y-m-d H:i:s');
+    $store_id = (int)($_GET['store_id'] ?? 1);
 
-    $store_id = (int)($_GET['store_id'] ?? $_POST['store_id'] ?? 1);
+    // 检查是否已存在昨天的日结报告
+    $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM pos_eod_reports WHERE store_id = :store_id AND report_date = :report_date");
+    $stmt_check->execute([
+        ':store_id' => $store_id,
+        ':report_date' => $yesterday_date_str
+    ]);
+    $report_exists = (int)$stmt_check->fetchColumn() > 0;
 
-    // 逐表试探
-    $pickTable = function(PDO $pdo, array $candidates) {
-        foreach ($candidates as $t) {
-            try { $pdo->query("SELECT 1 FROM `{$t}` LIMIT 1"); return $t; }
-            catch (Throwable $e) { /* try next */ }
-        }
-        return null;
-    };
-    $eod_table = $pickTable($pdo, ['pos_eod_reports','eod_reports']);
-
-    if (!$eod_table) {
-        echo json_encode(['status'=>'ok','needs_makeup'=>true,'target_business_date'=>$yesterday,'message'=>'未找到EOD表，默认提示补结'], JSON_UNESCAPED_UNICODE);
-        return;
+    if ($report_exists) {
+        // 如果报告已存在，一切正常
+        echo json_encode([
+            'status' => 'success',
+            'data' => [ 'previous_day_unclosed' => false, 'unclosed_date' => null ]
+        ]);
+        exit;
     }
 
-    // JSON_EXTRACT 支持性
-    $hasJsonExtract = (function(PDO $pdo) {
-        try { $pdo->query("SELECT JSON_EXTRACT('{\"a\":1}', '$.a')"); return true; }
-        catch (Throwable $e) { return false; }
-    })($pdo);
+    // 如果报告不存在，检查昨天是否有交易，以确定是否需要补结
+    // 1. 计算 "昨天" 在 UTC 时间下的起止范围
+    $yesterday_start_utc = (new DateTime($yesterday_date_str . ' 00:00:00', $tzMadrid))->setTimezone($utc)->format('Y-m-d H:i:s');
+    $yesterday_end_utc   = (new DateTime($yesterday_date_str . ' 23:59:59', $tzMadrid))->setTimezone($utc)->format('Y-m-d H:i:s');
 
-    // 先按 JSON business_date，失败则用 created_at 区间
-    $count = 0;
-    try {
-        if ($hasJsonExtract) {
-            $sql = "SELECT COUNT(*) FROM `{$eod_table}` WHERE store_id=:sid
-                      AND (JSON_EXTRACT(report_json,'$.business_date')=:bd
-                           OR (created_at BETWEEN :s AND :e))";
-            $st = $pdo->prepare($sql);
-            $st->execute([':sid'=>$store_id, ':bd'=>$yesterday, ':s'=>$bd_start_utc, ':e'=>$bd_end_utc]);
-        } else {
-            $sql = "SELECT COUNT(*) FROM `{$eod_table}` WHERE store_id=:sid
-                      AND (report_json LIKE :needle
-                           OR (created_at BETWEEN :s AND :e))";
-            $st = $pdo->prepare($sql);
-            $st->execute([
-                ':sid'=>$store_id,
-                ':needle'=>'%"business_date":"'.$yesterday.'"%',
-                ':s'=>$bd_start_utc, ':e'=>$bd_end_utc
-            ]);
-        }
-        $count = (int)$st->fetchColumn();
-    } catch (Throwable $e) {
-        error_log('[POS][check_eod_status] ' . $e->getMessage());
-    }
-
-    if ($count > 0) {
-        echo json_encode(['status'=>'ok','needs_makeup'=>false,'message'=>'昨日已完成日结'], JSON_UNESCAPED_UNICODE);
+    // 2. 在该 UTC 范围内查找发票
+    $stmt_invoice = $pdo->prepare(
+        "SELECT 1 FROM pos_invoices WHERE store_id = :store_id AND issued_at BETWEEN :start_utc AND :end_utc LIMIT 1"
+    );
+    $stmt_invoice->execute([
+        ':store_id' => $store_id,
+        ':start_utc' => $yesterday_start_utc,
+        ':end_utc' => $yesterday_end_utc
+    ]);
+    $invoice_exists = $stmt_invoice->fetchColumn() !== false;
+    
+    if ($invoice_exists) {
+        // 报告不存在，但有交易 -> 需要补结
+        echo json_encode([
+            'status' => 'success',
+            'data' => [ 'previous_day_unclosed' => true, 'unclosed_date' => $yesterday_date_str ]
+        ]);
     } else {
-        echo json_encode(['status'=>'ok','needs_makeup'=>true,'target_business_date'=>$yesterday,'message'=>'检测到昨日未完成日结'], JSON_UNESCAPED_UNICODE);
+        // 报告不存在，也没有交易 -> 无需操作
+        echo json_encode([
+            'status' => 'success',
+            'data' => [ 'previous_day_unclosed' => false, 'unclosed_date' => null ]
+        ]);
     }
 
 } catch (Throwable $e) {
     error_log('[POS][check_eod_status fatal] ' . $e->getMessage());
-    echo json_encode(['status'=>'error','message'=>'检查失败'], JSON_UNESCAPED_UNICODE);
+    http_response_code(500);
+    echo json_encode(['status'=>'error','message'=>'检查日结状态失败: ' . $e->getMessage()]);
 }

@@ -27,7 +27,10 @@ Object.assign(I18N_NS.zh, {
   unclosed_eod_message: '系统检测到日期为 {date} 的营业日没有日结报告。',
   unclosed_eod_instruction: '为保证数据准确，请先完成该日期的日结，再开始新的营业日。',
   unclosed_eod_button: '立即完成上一日日结',
-  unclosed_eod_force_button: '强制开启新一日 (需授权)', // Kept for future
+  unclosed_eod_force_button: '强制开启新一日 (需授权)',
+  // --- Hold Texts FIX ---
+  hold_placeholder: '输入备注，例如桌号或客人特征...',
+  hold_instruction: '将当前购物车暂存为挂起单，恢复后可继续结账。'
 });
 Object.assign(I18N_NS.es, {
   points_redeem_placeholder: 'Usar puntos',
@@ -41,7 +44,10 @@ Object.assign(I18N_NS.es, {
   unclosed_eod_message: 'El sistema detectó que el día hábil con fecha {date} no tiene informe de cierre.',
   unclosed_eod_instruction: 'Para garantizar la precisión de los datos, complete primero el cierre de ese día antes de comenzar un nuevo día hábil.',
   unclosed_eod_button: 'Completar Cierre Anterior Ahora',
-  unclosed_eod_force_button: 'Forzar Inicio Nuevo Día (Requiere Autorización)', // Kept for future
+  unclosed_eod_force_button: 'Forzar Inicio Nuevo Día (Requiere Autorización)',
+  // --- Hold Texts FIX ---
+  hold_placeholder: 'Añadir nota, p.ej. nº de mesa o cliente...',
+  hold_instruction: 'Guarda el carrito actual. Puede ser restaurado para finalizar el pago más tarde.'
 });
 
 // --- 核心修复：显示漏结提示的纯HTML覆盖层 ---
@@ -165,13 +171,17 @@ async function initApplication() {
         const eodStatusResult = await eodStatusResponse.json();
 
         if (eodStatusResult.status === 'success' && eodStatusResult.data.previous_day_unclosed) {
-            // --- 核心修复：显示纯HTML覆盖层，阻止后续加载 ---
+            // --- 核心修复：将目标日期存入全局状态 ---
+            STATE.unclosedEodDate = eodStatusResult.data.unclosed_date; 
+            // ------------------------------------
+            
             showUnclosedEodOverlay(eodStatusResult.data.unclosed_date);
             console.log("Previous EOD unclosed. Blocking UI.");
             return; // 阻止加载主界面
         }
 
         // --- 只有在没有漏结时才执行 ---
+        STATE.unclosedEodDate = null; // --- 核心修复：确保正常启动时此状态为空 ---
         await fetchInitialData();
         applyI18N();
         updateMemberUI();

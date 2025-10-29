@@ -27,14 +27,25 @@ export async function fetchInitialData() {
         STATE.products = result.data.products;
         STATE.categories = result.data.categories;
         STATE.addons = result.data.addons;
-        // --- 核心修复：存储加载到的兑换规则 ---
         STATE.redemptionRules = result.data.redemption_rules || [];
-        // ----------------------------------
         if (!STATE.active_category_key && STATE.categories.length > 0) {
             STATE.active_category_key = STATE.categories[0].key;
         }
     }
 }
+
+/**
+ * Version: 2.2.0
+ * Fetches all available print templates from the backend.
+ */
+export async function fetchPrintTemplates() {
+    const result = await apiCall('./api/pos_print_handler.php?action=get_templates');
+    if (result.status === 'success') {
+        STATE.printTemplates = result.data || {};
+        console.log('Print templates loaded:', STATE.printTemplates);
+    }
+}
+
 
 export async function calculatePromotionsAPI(payload) {
     const result = await apiCall('api/calculate_promotions.php', {
@@ -48,13 +59,10 @@ export async function calculatePromotionsAPI(payload) {
 export async function submitOrderAPI(paymentPayload) {
      const payload = {
         cart: STATE.cart,
-        // --- 核心修复：传递 coupon_code 和 redemption_rule_id ---
-        coupon_code: STATE.activeCouponCode, // 优惠券码
-        redemption_rule_id: STATE.activeRedemptionRuleId, // 积分兑换规则ID
-        // ------------------------------------------------
+        coupon_code: STATE.activeCouponCode,
+        redemption_rule_id: STATE.activeRedemptionRuleId,
         member_id: STATE.activeMember ? STATE.activeMember.id : null,
         payment: paymentPayload,
-        // Include redeemed points in the final order submission
         points_redeemed: STATE.calculatedCart.points_redemption ? STATE.calculatedCart.points_redemption.points_redeemed : 0,
         points_discount: STATE.calculatedCart.points_redemption ? STATE.calculatedCart.points_redemption.discount_amount : 0
     };
