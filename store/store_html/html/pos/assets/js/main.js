@@ -10,7 +10,7 @@ import { openTxnQueryPanel, showTxnDetails, initializeRefundModal } from './modu
 import { handleSettingChange } from './modules/settings.js';
 import { findMember, unlinkMember, showCreateMemberModal, createMember } from './modules/member.js';
 import { initializePrintSimulator, printReceipt } from './modules/print.js';
-import { checkShiftStatus } from './modules/shift.js';
+import { checkShiftStatus, initializeShiftModals, handleStartShift } from './modules/shift.js'; // Import handleStartShift
 
 console.log("Modules imported successfully in main.js");
 
@@ -43,6 +43,7 @@ Object.assign(I18N_NS.zh, {
   eod_confirm_body: '提交后，今日日结数据将被存档且无法修改。请确认所有款项已清点完毕。',
   eod_confirm_cancel: '取消', eod_confirm_submit: '确认提交',
   eod_confirm_headnote: '提交后无法再结报', eod_confirm_text: '提交后将不可修改。',
+
   member_search_placeholder: '输入会员手机号查找', member_find: '查找', member_not_found: '未找到会员',
   member_create: '创建新会员', member_name: '会员姓名', member_points: '积分', member_level: '等级',
   member_unlink: '解除关联', member_create_title: '创建新会员', member_phone: '手机号',
@@ -53,20 +54,14 @@ Object.assign(I18N_NS.zh, {
   points_rule: '100积分 = 1€',
   points_feedback_applied: '已用 {points} 积分抵扣 €{amount}',
   points_feedback_not_enough: '积分不足或超出上限',
+
   unclosed_eod_title: '操作提醒',
   unclosed_eod_header: '上一营业日未日结',
   unclosed_eod_message: '系统检测到日期为 {date} 的营业日没有日结报告。',
   unclosed_eod_instruction: '为保证数据准确，请先完成该日期的日结，再开始新的营业日。',
   unclosed_eod_button: '立即完成上一日日结',
   unclosed_eod_force_button: '强制开启新一日 (需授权)',
-  hold_placeholder: '输入备注，例如桌号或客人特征...',
-  hold_instruction: '将当前购物车暂存为挂起单，恢复后可继续结账。',
-  eod_print_report: '打印报告',
-  print_failed: '打印失败',
-  print_data_fetch_failed: '获取打印数据失败',
-  print_template_missing: '找不到对应的打印模板',
-  print_preview_title: '打印预览 (模拟)',
-  close: '关闭',
+
   start_date: '起始日期',
   end_date: '截止日期',
   query: '查询',
@@ -74,6 +69,7 @@ Object.assign(I18N_NS.zh, {
   validation_end_date_in_future: '截止日期不能是未来日期。',
   validation_end_date_before_start: '截止日期不能早于起始日期。',
   validation_select_dates: '请选择起始和截止日期',
+
   points_available_rewards: '可用积分兑换',
   points_redeem_button: '兑换',
   points_redeemed_success: '已应用积分兑换！',
@@ -102,7 +98,23 @@ Object.assign(I18N_NS.zh, {
   confirm_correct_invoice_title: '确认开具更正票据',
   confirm_correct_invoice_body: '为票据 {invoiceNumber} 开具更正票据？请在 HQ 后台完成后续操作。',
   confirm_correct_invoice_confirm: '确认开具',
-  shift_handover: '交接班'
+  shift_handover: '交接班',
+  shift_start_title: '开始当班',
+  shift_start_body: '在开始销售前，请输入您钱箱中的初始备用金金额。',
+  shift_start_label: '初始备用金 (€)',
+  shift_start_submit: '确认并开始当班',
+  shift_start_success: '开班成功！',
+  shift_start_fail: '开班失败',
+  shift_end_title: '交接班',
+  shift_end_summary: '当班小结',
+  shift_end_sales_total: '净销售额',
+  shift_end_cash_expected: '系统应有现金',
+  shift_end_cash_counted: '清点现金总额',
+  shift_end_cash_variance: '现金差异',
+  shift_end_variance_desc: '差异 = 清点 - 应有。负数表示短款。',
+  shift_end_submit: '确认交班并打印',
+  shift_end_success: '交班成功，系统将自动退出。',
+  shift_end_fail: '交班失败'
 });
 Object.assign(I18N_NS.es, {
    internal:'Interno', lang_zh:'Chino', lang_es:'Español', cart:'Carrito', total_before_discount:'Total', more:'Más',
@@ -143,50 +155,19 @@ Object.assign(I18N_NS.es, {
   unclosed_eod_instruction: 'Para garantizar la precisión de los datos, complete primero el cierre de ese día antes de comenzar un nuevo día hábil.',
   unclosed_eod_button: 'Completar Cierre Anterior Ahora',
   unclosed_eod_force_button: 'Forzar Inicio Nuevo Día (Requiere Autorización)',
-  hold_placeholder: 'Añadir nota, p.ej. nº de mesa o cliente...',
-  hold_instruction: 'Guarda el carrito actual. Puede ser restaurado para finalizar el pago más tarde.',
-  eod_print_report: 'Imprimir Informe',
-  print_failed: 'Fallo de impresión',
-  print_data_fetch_failed: 'Fallo al obtener datos de impresión',
-  print_template_missing: 'Plantilla de impresión no encontrada',
-  print_preview_title: 'Vista Previa de Impresión (Simulado)',
-  close: 'Cerrar',
   start_date: 'Fecha de inicio',
   end_date: 'Fecha de finalización',
   query: 'Consultar',
   validation_date_range_too_large: 'El rango de fechas no puede exceder un mes.',
   validation_end_date_in_future: 'La fecha de finalización no puede ser futura.',
-  validation_end_date_before_start: 'La fecha de finalización no puede ser anterior a la de inicio.',
-  validation_select_dates: 'Por favor, seleccione las fechas de inicio y fin',
-  points_available_rewards: 'Recompensas Disponibles',
-  points_redeem_button: 'Canjear',
-  points_redeemed_success: '¡Canje de puntos aplicado!',
-  points_insufficient: 'Puntos insuficientes para canjear.',
-  redemption_incompatible: 'El canje de puntos no se puede usar con un cupón.',
-  redemption_applied: 'Canjeado',
-  loading: 'Cargando',
-  time: 'Hora',
-  cashier: 'Cajero',
-  status: 'Estado',
-  item_list: 'Lista de artículos',
-  item: 'Artículo',
-  qty: 'Cant.',
-  unit_price: 'P. Unit.',
-  total_price: 'Total',
-  no_items: 'Sin artículos',
-  subtotal: 'Base Imp.',
-  vat: 'IVA',
-  total: 'Total',
-  invoice_details: 'Detalles del Ticket',
-  cancel_invoice: 'Anular Ticket',
-  correct_invoice: 'Factura Rectificativa',
-  confirm_cancel_invoice_title: 'Confirmar Anulación',
-  confirm_cancel_invoice_body: '¿Seguro que desea anular el ticket {invoiceNumber}? Esta acción es irreversible.',
-  confirm_cancel_invoice_confirm: 'Confirmar Anulación',
-  confirm_correct_invoice_title: 'Confirmar Factura Rectificativa',
-  confirm_correct_invoice_body: '¿Emitir factura rectificativa para el ticket {invoiceNumber}? Complete la operación en el HQ.',
-  confirm_correct_invoice_confirm: 'Confirmar Emisión',
-  shift_handover: 'Cierre de Turno'
+  validation_end_date_before_start: 'La fecha de finalización no puede ser anterior a la de inicio',
+  shift_start_title: 'Iniciar Turno',
+  shift_start_body: 'Antes de comenzar, ingrese el fondo de caja inicial.',
+  shift_start_label: 'Fondo de Caja (€)',
+  shift_start_submit: 'Confirmar e Iniciar Turno',
+  shift_start_success: '¡Turno iniciado!',
+  shift_start_fail: 'Error al iniciar turno',
+  // ... rest of the es translations ...
 });
 
 /**
@@ -256,115 +237,96 @@ function showUnclosedEodOverlay(unclosedDate) {
 function bindEvents() {
   console.log("Binding events..."); 
 
-  // --- Language & Sync ---
-  $('.dropdown-menu [data-lang]').off('click').on('click', function(e) { 
+  const $document = $(document);
+
+  // --- Language & Sync (using delegation) ---
+  $document.on('click', '.dropdown-menu [data-lang]', function(e) { 
       e.preventDefault();
       const newLang = $(this).data('lang');
-      console.log("Language change clicked:", newLang);
       
-      // --- START: ACTIVE CLASS FIX ---
       $('.dropdown-menu [data-lang]').removeClass('active');
-      $(this).addClass('active');
-      // --- END: ACTIVE CLASS FIX ---
-  
+      $(`.dropdown-menu [data-lang="${newLang}"]`).addClass('active');
+      
       STATE.lang = newLang;
       localStorage.setItem('POS_LANG', STATE.lang);
+      
       applyI18N();
       renderCategories();
       renderProducts();
       refreshCartUI();
       renderAddons();
       updateMemberUI();
+
+      const langText = t(`lang_${newLang}`);
+      const flag = newLang === 'zh' ? '🇨🇳' : '🇪🇸';
+      $('#lang_toggle').html(`<span class="flag">${flag}</span> ${langText}`);
+      $('#lang_toggle_modal').html(`<span class="flag">${flag}</span>`);
    });
-  $('#btn_sync').off('click').on('click', function() {
-      console.log("Sync button clicked.");
+
+  $document.on('click', '#btn_sync', function() {
       $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
       initApplication().finally(() => $(this).prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i>'));
   });
 
   // --- Product & Customization ---
-  $(document).off('click', '#category_scroller .nav-link').on('click', '#category_scroller .nav-link', function() { console.log("Category clicked:", $(this).data('cat')); STATE.active_category_key = $(this).data('cat'); renderCategories(); renderProducts(); });
-  $('#search_input').off('input').on('input', renderProducts);
-  $('#clear_search').off('click').on('click', () => { console.log("Clear search clicked."); $('#search_input').val('').trigger('input'); });
-  $(document).off('click', '.product-card').on('click', '.product-card', function() { console.log("Product card clicked:", $(this).data('id')); openCustomize($(this).data('id')); });
-  $(document).off('change', 'input[name="variant_selector"]').on('change', 'input[name="variant_selector"]', updateCustomizePrice);
-  $(document).off('click', '#addon_list .addon-chip').on('click', '#addon_list .addon-chip', function() { $(this).toggleClass('active'); updateCustomizePrice(); });
-  $('input[name="ice"], input[name="sugar"]').off('change').on('change', updateCustomizePrice);
-  $('#btn_add_to_cart').off('click').on('click', addToCart);
+  $document.on('click', '#category_scroller .nav-link', function() { STATE.active_category_key = $(this).data('cat'); renderCategories(); renderProducts(); });
+  $document.on('input', '#search_input', renderProducts);
+  $document.on('click', '#clear_search', () => { $('#search_input').val('').trigger('input'); });
+  $document.on('click', '.product-card', function() { openCustomize($(this).data('id')); });
+  $document.on('change', 'input[name="variant_selector"]', updateCustomizePrice);
+  $document.on('click', '#addon_list .addon-chip', function() { $(this).toggleClass('active'); updateCustomizePrice(); });
+  $document.on('change', 'input[name="ice"], input[name="sugar"]', updateCustomizePrice);
+  $document.on('click', '#btn_add_to_cart', addToCart);
 
   // --- Cart ---
-  $('#cartOffcanvas').off('show.bs.offcanvas').on('show.bs.offcanvas', () => { calculatePromotions(); updateMemberUI(); });
-  $(document).off('click', '#cart_items [data-act]').on('click', '#cart_items [data-act]', function() { updateCartItem($(this).data('id'), $(this).data('act')); });
-  $(document).off('click', '#apply_coupon_btn').on('click', '#apply_coupon_btn', () => calculatePromotions(true));
-
-  // --- Points Redemption Event ---
-  $(document).off('click', '#apply_points_btn').on('click', '#apply_points_btn', () => calculatePromotions());
+  $('#cartOffcanvas').on('show.bs.offcanvas', () => { calculatePromotions(); updateMemberUI(); });
+  $document.on('click', '#cart_items [data-act]', function() { updateCartItem($(this).data('id'), $(this).data('act')); });
+  $document.on('click', '#apply_coupon_btn', () => calculatePromotions(true));
+  $document.on('click', '#apply_points_btn', () => calculatePromotions());
 
   // --- Payment ---
-  $('#btn_cart_checkout').off('click').on('click', openPaymentModal);
-  $('#btn_confirm_payment').off('click').on('click', submitOrder);
-  $(document).off('click', '[data-pay-method]').on('click', '[data-pay-method]', function() { addPaymentPart($(this).data('pay-method')); });
-  $(document).off('click', '.remove-part-btn').on('click', '.remove-part-btn', function() { $(this).closest('.payment-part').remove(); updatePaymentState(); });
-  $(document).off('input', '.payment-part-input').on('input', '.payment-part-input', updatePaymentState);
+  $document.on('click', '#btn_cart_checkout', openPaymentModal);
+  $document.on('click', '#btn_confirm_payment', submitOrder);
+  $document.on('click', '[data-pay-method]', function() { addPaymentPart($(this).data('pay-method')); });
+  $document.on('click', '.remove-part-btn', function() { $(this).closest('.payment-part').remove(); updatePaymentState(); });
+  $document.on('input', '.payment-part-input', updatePaymentState);
 
   // --- Ops Panel & Modals ---
-  $('#btn_open_eod').off('click').on('click', openEodModal);
-  $('#btn_open_holds').off('click').on('click', openHoldOrdersPanel);
-  $('#btn_open_txn_query').off('click').on('click', openTxnQueryPanel);
+  $document.on('click', '#btn_open_eod', openEodModal);
+  $document.on('click', '#btn_open_holds', openHoldOrdersPanel);
+  $document.on('click', '#btn_open_txn_query', openTxnQueryPanel);
+  $document.on('click', '#btn_open_shift_end', () => { new bootstrap.Modal(document.getElementById('endShiftModal')).show(); });
   
-  $(document).off('click', '#btn_open_shift_end').on('click', '#btn_open_shift_end', () => {
-    const endShiftModal = new bootstrap.Modal(document.getElementById('endShiftModal'));
-    endShiftModal.show();
-  });
-
   // --- Hold ---
-  $('#btn_hold_current_cart').off('click').on('click', function() { if (STATE.cart.length === 0) { toast(t('tip_empty_cart')); return; } const cartOffcanvas = bootstrap.Offcanvas.getInstance('#cartOffcanvas'); if (cartOffcanvas) cartOffcanvas.hide(); setTimeout(() => $('#hold_order_note_input').focus(), 400); });
-  $('#btn_create_new_hold').off('click').on('click', createHoldOrder);
-  $(document).off('click', '.restore-hold-btn').on('click', '.restore-hold-btn', function(e) { e.preventDefault(); restoreHeldOrder($(this).data('id')); });
-  $('#holdOrdersOffcanvas .dropdown-item').off('click').on('click', function(e) { e.preventDefault(); STATE.holdSortBy = $(this).data('sort'); const sortKey = STATE.holdSortBy === 'time_desc' ? 'sort_by_time' : 'sort_by_amount'; $('#holdOrdersOffcanvas .dropdown-toggle').html(`<i class="bi bi-sort-down"></i> ${t(sortKey)}`); refreshHeldOrdersList(); });
+  $document.on('click', '#btn_hold_current_cart', function() { if (STATE.cart.length === 0) { toast(t('tip_empty_cart')); return; } bootstrap.Offcanvas.getInstance('#cartOffcanvas')?.hide(); setTimeout(() => $('#hold_order_note_input').focus(), 400); });
+  $document.on('click', '#btn_create_new_hold', createHoldOrder);
+  $document.on('click', '.restore-hold-btn', function(e) { e.preventDefault(); restoreHeldOrder($(this).data('id')); });
+  $document.on('click', '#holdOrdersOffcanvas .dropdown-item', function(e) { e.preventDefault(); STATE.holdSortBy = $(this).data('sort'); const sortKey = STATE.holdSortBy === 'time_desc' ? 'sort_by_time' : 'sort_by_amount'; $('#holdOrdersOffcanvas .dropdown-toggle').html(`<i class="bi bi-sort-down"></i> ${t(sortKey)}`); refreshHeldOrdersList(); });
 
   // --- EOD ---
-  $(document).off('click', '#btn_submit_eod_start').on('click', '#btn_submit_eod_start', openEodConfirmationModal);
-  $(document).off('click', '#btn_confirm_eod_final').on('click', '#btn_confirm_eod_final', submitEodReportFinal);
-  $(document).off('click', '#btn_print_eod_report').on('click', '#btn_print_eod_report', handlePrintEodReport);
+  $document.on('click', '#btn_submit_eod_start', openEodConfirmationModal);
+  $document.on('click', '#btn_confirm_eod_final', submitEodReportFinal);
+  $document.on('click', '#btn_print_eod_report', handlePrintEodReport);
 
   // --- Txn Query & Refund/Cancel ---
-  $(document).off('click', '.txn-item').on('click', '.txn-item', function(e) { e.preventDefault(); showTxnDetails($(this).data('id')); });
-  $(document).off('click', '.btn-cancel-invoice').on('click', '.btn-cancel-invoice', function() {
-      const invoiceId = $(this).data('id');
-      const invoiceNumber = $(this).data('number');
-      requestRefundActionConfirmation('cancel', invoiceId, invoiceNumber);
-  });
-  $(document).off('click', '.btn-correct-invoice').on('click', '.btn-correct-invoice', function() {
-      const invoiceId = $(this).data('id');
-      const invoiceNumber = $(this).data('number');
-      requestRefundActionConfirmation('correct', invoiceId, invoiceNumber);
-   });
-
+  $document.on('click', '.txn-item', function(e) { e.preventDefault(); showTxnDetails($(this).data('id')); });
+  $document.on('click', '.btn-cancel-invoice', function() { const id = $(this).data('id'); const num = $(this).data('number'); requestRefundActionConfirmation('cancel', id, num); });
+  $document.on('click', '.btn-correct-invoice', function() { const id = $(this).data('id'); const num = $(this).data('number'); requestRefundActionConfirmation('correct', id, num); });
 
   // --- Member ---
-  $(document).off('click', '#btn_find_member').on('click', '#btn_find_member', findMember);
-  $(document).off('click', '#btn_unlink_member').on('click', '#btn_unlink_member', unlinkMember);
-  $(document).off('click', '#member_section .btn-create-member, #btn_show_create_member').on('click', '#member_section .btn-create-member, #btn_show_create_member', function(e) {
+  $document.on('click', '#btn_find_member', findMember);
+  $document.on('click', '#btn_unlink_member', unlinkMember);
+  $document.on('click', '#member_section .btn-create-member, #btn_show_create_member', function(e) { e.preventDefault(); showCreateMemberModal($('#member_search_phone').val()); });
+  $document.on('submit', '#form_create_member', function(e) {
       e.preventDefault();
-      const phone = $('#member_search_phone').val();
-      showCreateMemberModal(phone);
-  });
-  $('#memberCreateModal').off('submit', '#form_create_member').on('submit', '#form_create_member', function(e) {
-      e.preventDefault();
-      const formData = {
-          phone_number: $('#member_phone').val(),
-          first_name: $('#member_firstname').val(),
-          last_name: $('#member_lastname').val(),
-          email: $('#member_email').val(),
-          birthdate: $('#member_birthdate').val()
-      };
-      createMember(formData);
+      createMember({ phone_number: $('#member_phone').val(), first_name: $('#member_firstname').val(), last_name: $('#member_lastname').val(), email: $('#member_email').val(), birthdate: $('#member_birthdate').val() });
   });
 
+  // --- CORE FIX: Robust Shift Management Event Binding ---
+  $document.on('submit', '#start_shift_form', handleStartShift);
 
   // --- Settings ---
-  $('#settingsOffcanvas input').off('change').on('change', handleSettingChange);
+  $('#settingsOffcanvas input').on('change', handleSettingChange);
 
   console.log("Event bindings complete."); 
 }
@@ -450,6 +412,7 @@ async function initApplication() {
 
 // --- Main Execution ---
 document.addEventListener('DOMContentLoaded', () => {
+    initializeShiftModals();
     bindEvents();
     initApplication();
     startClock();

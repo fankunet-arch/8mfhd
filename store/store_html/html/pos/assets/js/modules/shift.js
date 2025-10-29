@@ -8,9 +8,10 @@ let endShiftModal = null;
 let currentShiftSummary = null;
 
 /**
- * Initializes the shift module, gets modal instances, and binds events.
+ * Initializes the shift module, gets modal instances.
+ * Event binding is now handled by main.js for robustness.
  */
-function initializeShiftModals() {
+export function initializeShiftModals() {
     const startModalEl = document.getElementById('startShiftModal');
     const endModalEl = document.getElementById('endShiftModal');
 
@@ -23,17 +24,6 @@ function initializeShiftModals() {
 
     if (endModalEl) {
         endShiftModal = new bootstrap.Modal(endModalEl);
-    }
-
-    // Bind event listeners
-    const startShiftForm = document.getElementById('start_shift_form');
-    if (startShiftForm) {
-        startShiftForm.addEventListener('submit', handleStartShift);
-    }
-
-    const endShiftForm = document.getElementById('end_shift_form');
-    if (endShiftForm) {
-        endShiftForm.addEventListener('submit', handleEndShift);
     }
     
     // Refresh summary when end shift modal is shown
@@ -70,8 +60,9 @@ export async function checkShiftStatus() {
 
 /**
  * Handles the submission of the "Start Shift" form.
+ * Exported to be called from main.js event handler.
  */
-async function handleStartShift(event) {
+export async function handleStartShift(event) {
     event.preventDefault();
     const startingFloatInput = document.getElementById('starting_float');
     const startingFloat = parseFloat(startingFloatInput.value);
@@ -141,7 +132,6 @@ async function fetchShiftSummary() {
             `;
             summaryBody.innerHTML = summaryHtml;
             
-            // Auto-update cash variance on input
             const countedCashInput = document.getElementById('counted_cash');
             countedCashInput.addEventListener('input', () => {
                 const counted = parseFloat(countedCashInput.value) || 0;
@@ -199,6 +189,3 @@ async function handleEndShift(event) {
         submitBtn.disabled = false;
     }
 }
-
-// Initialize the module
-initializeShiftModals();

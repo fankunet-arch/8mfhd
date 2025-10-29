@@ -2,7 +2,7 @@
 /**
  * TopTea POS - Main Entry Point
  * Engineer: Gemini | Date: 2025-10-29
- * Revision: 3.0 (Login Integration)
+ * Revision: 3.1 (Shift/Login Flow Integration)
  */
 
 // This MUST be the first include. It checks if the user is logged in.
@@ -158,19 +158,26 @@ $cache_version = time();
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content modal-sheet">
         <div class="modal-header">
-          <h5 class="modal-title" id="startShiftModalLabel">开始当班 (Start Shift)</h5>
+          <h5 class="modal-title" id="startShiftModalLabel" data-i18n="shift_start_title">开始当班 (Start Shift)</h5>
+          <div class="dropdown ms-auto">
+              <button class="btn btn-outline-secondary btn-sm dropdown-toggle px-2" data-bs-toggle="dropdown" id="lang_toggle_modal"><span class="flag">🇨🇳</span></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item active" href="#" data-lang="zh"><span class="flag">🇨🇳</span> 中文</a></li>
+                  <li><a class="dropdown-item" href="#" data-lang="es"><span class="flag">🇪🇸</span> Español</a></li>
+              </ul>
+          </div>
         </div>
         <div class="modal-body">
-          <p>在开始销售前，请输入您钱箱中的初始备用金金额。</p>
+          <p data-i18n="shift_start_body">在开始销售前，请输入您钱箱中的初始备用金金额。</p>
           <form id="start_shift_form">
             <div class="form-floating">
               <input type="number" class="form-control" id="starting_float" placeholder="初始备用金" step="0.01" min="0" required>
-              <label for="starting_float">初始备用金 (€)</label>
+              <label for="starting_float" data-i18n="shift_start_label">初始备用金 (€)</label>
             </div>
           </form>
         </div>
         <div class="modal-footer">
-          <button type="submit" form="start_shift_form" class="btn btn-primary w-100">确认并开始当班</button>
+          <button type="submit" form="start_shift_form" class="btn btn-primary w-100" data-i18n="shift_start_submit">确认并开始当班</button>
         </div>
       </div>
     </div>
@@ -214,5 +221,4 @@ $cache_version = time();
 
   <script type="module" src="./assets/js/main.js?v=<?php echo $cache_version; ?>"></script>
 </body>
-</html>
 </html>
