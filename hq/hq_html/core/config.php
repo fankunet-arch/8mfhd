@@ -2,13 +2,15 @@
 /**
  * Toptea HQ - cpsys
  * Core Configuration File (Final Production Version)
- * Engineer: Gemini | Date: 2025-10-23 | Revision: 3.9
+ * Engineer: Gemini | Date: 2025-10-29 | Revision: 4.0 (Enable File Logging)
  */
 
 // --- PHP Environment Setup ---
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+ini_set('display_errors', '0'); // Turn off displaying errors
+ini_set('display_startup_errors', '0'); // Turn off displaying startup errors
+ini_set('log_errors', '1'); // Enable logging errors
+ini_set('error_log', '/web_toptea/logs/php_errors_hq.log'); // Specify log file path (Adjust path if needed)
+error_reporting(E_ALL); // Report all errors
 mb_internal_encoding('UTF-8');
 
 // --- Database Configuration ---
@@ -38,5 +40,8 @@ $options = [
 try {
     $pdo = new PDO($dsn, $db_user, $db_pass, $options);
 } catch (\PDOException $e) {
+    // Log the error
+    error_log("HQ Database connection failed: " . $e->getMessage());
+    // Optionally throw exception or display generic error page for HQ
     throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
