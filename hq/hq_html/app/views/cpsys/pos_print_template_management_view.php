@@ -16,12 +16,6 @@ function get_template_type_name($type) {
     return $map[$type] ?? $type;
 }
 ?>
-<div class="alert alert-info" role="alert">
-  <h4 class="alert-heading">打印模板管理 (高级功能)</h4>
-  <p>此页面用于管理POS终端的打印模板。模板内容使用JSON格式定义，它精确控制小票上打印的每一行内容、格式和变量。目前仅支持通过直接编辑JSON来修改模板。</p>
-  <hr>
-  <p class="mb-0">未来的版本将提供图形化的拖放编辑器。</p>
-</div>
 
 <div class="d-flex justify-content-end mb-3">
     <button class="btn btn-primary" id="create-btn" data-bs-toggle="offcanvas" data-bs-target="#data-drawer">
@@ -68,6 +62,13 @@ function get_template_type_name($type) {
             </table>
         </div>
     </div>
+</div>
+
+<div class="alert alert-info mt-4" role="alert">
+  <h4 class="alert-heading">关于打印模板 (高级功能)</h4>
+  <p>此页面用于管理POS终端的打印模板。模板内容使用JSON格式定义，它精确控制小票上打印的每一行内容、格式和变量。目前仅支持通过直接编辑JSON来修改模板。</p>
+  <hr>
+  <p class="mb-0"><b>功能规划：</b>未来的版本将引入图形化编辑器，届时可拖拽组件轻松设计模板。</p>
 </div>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="data-drawer" aria-labelledby="drawer-label" style="width: 600px;">
