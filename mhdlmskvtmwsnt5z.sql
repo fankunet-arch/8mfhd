@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： mhdlmskvtmwsnt5z.mysql.db
--- 生成日期： 2025-10-29 20:11:16
+-- 生成日期： 2025-10-30 12:42:35
 -- 服务器版本： 8.4.6-6
 -- PHP 版本： 8.1.33
 
@@ -660,7 +660,7 @@ CREATE TABLE `kds_users` (
 --
 
 INSERT INTO `kds_users` (`id`, `store_id`, `username`, `password_hash`, `display_name`, `role`, `is_active`, `last_login_at`, `created_at`, `updated_at`, `deleted_at`) VALUES
-(1, 1, 'kds_user', '9b70757328316b184abb8e7ecffad4e3be9b6ba0bb2fb16890edebc2c50ebd1a', 'KDS Staff', 'staff', 1, '2025-10-29 19:00:21', '2025-10-23 22:00:09', '2025-10-29 19:00:21', NULL);
+(1, 1, 'kds_user', '9b70757328316b184abb8e7ecffad4e3be9b6ba0bb2fb16890edebc2c50ebd1a', 'KDS Staff', 'staff', 1, '2025-10-30 10:58:05', '2025-10-23 22:00:09', '2025-10-30 10:58:05', NULL);
 
 -- --------------------------------------------------------
 
@@ -705,6 +705,46 @@ CREATE TABLE `pos_coupons` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='POS优惠券码表';
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `pos_eod_records`
+--
+
+DROP TABLE IF EXISTS `pos_eod_records`;
+CREATE TABLE `pos_eod_records` (
+  `id` bigint UNSIGNED NOT NULL,
+  `shift_id` bigint UNSIGNED NOT NULL,
+  `store_id` bigint UNSIGNED NOT NULL,
+  `user_id` bigint UNSIGNED NOT NULL,
+  `started_at` datetime NOT NULL,
+  `ended_at` datetime NOT NULL,
+  `starting_float` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `cash_sales` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `cash_in` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `cash_out` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `cash_refunds` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `expected_cash` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `counted_cash` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `cash_diff` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
+-- 转存表中的数据 `pos_eod_records`
+--
+
+INSERT INTO `pos_eod_records` (`id`, `shift_id`, `store_id`, `user_id`, `started_at`, `ended_at`, `starting_float`, `cash_sales`, `cash_in`, `cash_out`, `cash_refunds`, `expected_cash`, `counted_cash`, `cash_diff`, `created_at`) VALUES
+(1, 2, 1, 1, '2025-10-29 23:42:00', '2025-10-30 00:31:50', 150.00, 0.00, 0.00, 0.00, 0.00, 150.00, 177.00, 27.00, '2025-10-30 00:31:50'),
+(2, 3, 1, 1, '2025-10-30 00:32:07', '2025-10-30 00:32:32', 156.00, 0.00, 0.00, 0.00, 0.00, 156.00, 161.00, 5.00, '2025-10-30 00:32:32'),
+(3, 4, 1, 1, '2025-10-30 00:38:21', '2025-10-30 00:38:56', 157.00, 0.00, 0.00, 0.00, 0.00, 157.00, 162.00, 5.00, '2025-10-30 00:38:56'),
+(4, 5, 1, 1, '2025-10-30 00:55:16', '2025-10-30 00:55:28', 158.00, 0.00, 0.00, 0.00, 0.00, 158.00, 163.00, 5.00, '2025-10-30 00:55:28'),
+(5, 6, 1, 1, '2025-10-30 00:56:10', '2025-10-30 00:56:17', 121.00, 0.00, 0.00, 0.00, 0.00, 121.00, 122.00, 1.00, '2025-10-30 00:56:17'),
+(6, 7, 1, 1, '2025-10-30 01:01:09', '2025-10-30 01:01:16', 123.00, 0.00, 0.00, 0.00, 0.00, 123.00, 124.00, 1.00, '2025-10-30 01:01:16'),
+(7, 8, 1, 1, '2025-10-30 01:05:47', '2025-10-30 01:05:53', 125.00, 0.00, 0.00, 0.00, 0.00, 125.00, 126.00, 1.00, '2025-10-30 01:05:53'),
+(8, 9, 1, 1, '2025-10-30 01:06:19', '2025-10-30 01:07:13', 125.00, 0.00, 0.00, 0.00, 0.00, 125.00, 111.00, -14.00, '2025-10-30 01:07:13'),
+(9, 10, 1, 1, '2025-10-30 01:31:31', '2025-10-30 01:31:42', 121.00, 0.00, 0.00, 0.00, 0.00, 121.00, 120.00, -1.00, '2025-10-30 01:31:42');
 
 -- --------------------------------------------------------
 
@@ -803,7 +843,11 @@ CREATE TABLE `pos_invoices` (
 INSERT INTO `pos_invoices` (`id`, `invoice_uuid`, `store_id`, `user_id`, `shift_id`, `issuer_nif`, `series`, `number`, `issued_at`, `invoice_type`, `taxable_base`, `vat_amount`, `discount_amount`, `final_total`, `status`, `cancellation_reason`, `correction_type`, `references_invoice_id`, `compliance_system`, `compliance_data`, `payment_summary`, `created_at`, `updated_at`) VALUES
 (27, '5bfdf4cf8a3b78a2edef35c225171f34', 1, 1, NULL, 'B66666666', 'A2025', 6119, '2025-10-27 18:39:24.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"e2aca30d6992e10c99a831fc27892afb2f861c514f6c8e9a9d493e69ef530b1c\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6119&i=2025-10-27 19:39:24.323896&h=e2aca30d\", \"previous_hash\": null, \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": [{\"amount\": 2, \"method\": \"Cash\"}, {\"amount\": 2.5, \"method\": \"Card\"}]}', '2025-10-27 18:39:24', '2025-10-27 18:39:24'),
 (28, '0abd5b1f70efec4e7de31da82c97eab0', 1, 1, NULL, 'B66666666', 'A2025', 6120, '2025-10-28 00:30:51.000000', 'F2', 4.09, 0.41, 5.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"51569d1592b46c4304985399bf82c83ffcceb863f35abd5d001a7bf7da06e04b\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6120&i=2025-10-28 01:30:51.905634&h=51569d15\", \"previous_hash\": \"e2aca30d6992e10c99a831fc27892afb2f861c514f6c8e9a9d493e69ef530b1c\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": [{\"amount\": 2, \"method\": \"Cash\"}, {\"amount\": 2.5, \"method\": \"Card\"}]}', '2025-10-28 00:30:51', '2025-10-28 00:30:51'),
-(29, 'd817bc85c1d49b58b932fdf46b023ea4', 1, 1, NULL, 'B66666666', 'A2025', 6121, '2025-10-28 18:39:33.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"d91b77d6cfeb7d1643fd4f31f0bcaa65ce6d86bae1c1d9ad4267419b64db5bee\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6121&i=2025-10-28 19:39:33.588859&h=d91b77d6\", \"previous_hash\": \"51569d1592b46c4304985399bf82c83ffcceb863f35abd5d001a7bf7da06e04b\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": [{\"amount\": 4.5, \"method\": \"Cash\"}]}', '2025-10-28 18:39:33', '2025-10-28 18:39:33');
+(29, 'd817bc85c1d49b58b932fdf46b023ea4', 1, 1, NULL, 'B66666666', 'A2025', 6121, '2025-10-28 18:39:33.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"d91b77d6cfeb7d1643fd4f31f0bcaa65ce6d86bae1c1d9ad4267419b64db5bee\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6121&i=2025-10-28 19:39:33.588859&h=d91b77d6\", \"previous_hash\": \"51569d1592b46c4304985399bf82c83ffcceb863f35abd5d001a7bf7da06e04b\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": [{\"amount\": 4.5, \"method\": \"Cash\"}]}', '2025-10-28 18:39:33', '2025-10-28 18:39:33'),
+(30, 'b4e7002b571334648a2dbdb7f70dbcc4', 1, 1, 2, 'B66666666', 'A2025', 6122, '2025-10-29 23:45:23.000000', 'F2', 4.66, 0.47, 0.57, 5.13, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"d6695d25be2e530b18aeee4ef5890a4c0186c277e26e33ed04eb08e7087d116c\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6122&i=2025-10-30 00:45:23.175672&h=d6695d25\", \"previous_hash\": \"d91b77d6cfeb7d1643fd4f31f0bcaa65ce6d86bae1c1d9ad4267419b64db5bee\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 5.13, \"total\": 5.13, \"change\": 0, \"summary\": [{\"amount\": 5.13, \"method\": \"Cash\"}]}', '2025-10-29 23:45:23', '2025-10-29 23:45:23'),
+(31, 'fdc12f3b4022edc0461c620a2141aa6c', 1, 1, 11, 'B66666666', 'A2025', 6123, '2025-10-30 10:58:54.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"82a8f977bebf7c769610649ba2f8dc6b1cfaa2962f179951f71441a1d28d16f8\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6123&i=2025-10-30 11:58:54.853097&h=82a8f977\", \"previous_hash\": \"d6695d25be2e530b18aeee4ef5890a4c0186c277e26e33ed04eb08e7087d116c\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": {\"card\": 0, \"cash\": 4.5, \"total\": 4.5, \"platform\": 0}}', '2025-10-30 10:58:54', '2025-10-30 10:58:54'),
+(32, '30e5fcfdad0cb91c79ff4adb6d1a1f4e', 1, 1, 11, 'B66666666', 'A2025', 6124, '2025-10-30 11:10:19.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"49ca4e5f40693d2ff48d32d69bb3b233bea6b024baef17d81b4b9039af930746\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6124&i=2025-10-30 12:10:19.290336&h=49ca4e5f\", \"previous_hash\": \"82a8f977bebf7c769610649ba2f8dc6b1cfaa2962f179951f71441a1d28d16f8\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": {\"card\": 0, \"cash\": 4.5, \"total\": 4.5, \"platform\": 0}}', '2025-10-30 11:10:19', '2025-10-30 11:10:19'),
+(33, 'f2712c6d76444875ee783a5389a67832', 1, 1, 11, 'B66666666', 'A2025', 6125, '2025-10-30 11:10:46.000000', 'F2', 4.09, 0.41, 0.50, 4.50, 'ISSUED', NULL, NULL, NULL, 'VERIFACTU', '{\"hash\": \"33b5404dc999e54fbb1ead825a98d15b17d270eb2df51484417f91ceb8253090\", \"qr_content\": \"URL:https://www.agenciatributaria.gob.es/verifactu?s=A2025&n=6125&i=2025-10-30 12:10:46.382673&h=33b5404d\", \"previous_hash\": \"49ca4e5f40693d2ff48d32d69bb3b233bea6b024baef17d81b4b9039af930746\", \"system_version\": \"TopTeaPOS v1.0-VERIFACTU\"}', '{\"paid\": 4.5, \"total\": 4.5, \"change\": 0, \"summary\": {\"card\": 0, \"cash\": 4.5, \"total\": 4.5, \"platform\": 0}}', '2025-10-30 11:10:46', '2025-10-30 11:10:46');
 
 -- --------------------------------------------------------
 
@@ -833,7 +877,11 @@ INSERT INTO `pos_invoice_items` (`id`, `invoice_id`, `item_name`, `variant_name`
 (22, 27, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}'),
 (23, 28, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}'),
 (24, 28, '珍珠奶茶', '中杯', 1, 0.00, 0.00, 10.00, 0.00, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}'),
-(25, 29, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"100\", \"sugar\": \"0\", \"addons\": [], \"remark\": \"\"}');
+(25, 29, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"100\", \"sugar\": \"0\", \"addons\": [], \"remark\": \"\"}'),
+(26, 30, '珍珠奶茶', '中杯', 1, 5.13, 4.66, 10.00, 0.47, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [\"pudding\"], \"remark\": \"\"}'),
+(27, 31, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}'),
+(28, 32, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}'),
+(29, 33, '珍珠奶茶', '中杯', 1, 4.50, 4.09, 10.00, 0.41, '{\"ice\": \"50\", \"sugar\": \"50\", \"addons\": [], \"remark\": \"\"}');
 
 -- --------------------------------------------------------
 
@@ -1117,6 +1165,22 @@ CREATE TABLE `pos_shifts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='POS交接班记录表';
 
 --
+-- 转存表中的数据 `pos_shifts`
+--
+
+INSERT INTO `pos_shifts` (`id`, `shift_uuid`, `store_id`, `user_id`, `start_time`, `end_time`, `status`, `starting_float`, `counted_cash`, `expected_cash`, `cash_variance`, `payment_summary`, `sales_summary`, `created_at`, `updated_at`) VALUES
+(2, 'a9f607bf8149e5eaa01214956a1ee97a', 1, 1, '2025-10-29 23:42:00', '2025-10-30 00:31:50', 'ENDED', 150.00, 177.00, NULL, NULL, NULL, NULL, '2025-10-29 23:42:00', '2025-10-30 00:31:50'),
+(3, 'f1b4669f4a493fec587736cda012eb40', 1, 1, '2025-10-30 00:32:07', '2025-10-30 00:32:32', 'ENDED', 156.00, 161.00, NULL, NULL, NULL, NULL, '2025-10-30 00:32:07', '2025-10-30 00:32:32'),
+(4, 'c782add557a5f57e824857ad7e048d6e', 1, 1, '2025-10-30 00:38:21', '2025-10-30 00:38:56', 'ENDED', 157.00, 162.00, NULL, NULL, NULL, NULL, '2025-10-30 00:38:21', '2025-10-30 00:38:56'),
+(5, '59fc0d3a388e809ae8c8765331ed6e99', 1, 1, '2025-10-30 00:55:16', '2025-10-30 00:55:28', 'ENDED', 158.00, 163.00, NULL, NULL, NULL, NULL, '2025-10-30 00:55:16', '2025-10-30 00:55:28'),
+(6, '8834c88c10753bb0706a4bb7ff19d070', 1, 1, '2025-10-30 00:56:10', '2025-10-30 00:56:17', 'ENDED', 121.00, 122.00, NULL, NULL, NULL, NULL, '2025-10-30 00:56:10', '2025-10-30 00:56:17'),
+(7, 'e80df01e38b8fac6f1b28dd79a089b52', 1, 1, '2025-10-30 01:01:09', '2025-10-30 01:01:16', 'ENDED', 123.00, 124.00, NULL, NULL, NULL, NULL, '2025-10-30 01:01:09', '2025-10-30 01:01:16'),
+(8, '08d317c531280a0d639aaf51efdf358d', 1, 1, '2025-10-30 01:05:47', '2025-10-30 01:05:53', 'ENDED', 125.00, 126.00, NULL, NULL, NULL, NULL, '2025-10-30 01:05:47', '2025-10-30 01:05:53'),
+(9, '4b2d509b7f20c4d25d97766333698541', 1, 1, '2025-10-30 01:06:19', '2025-10-30 01:07:13', 'ENDED', 125.00, 111.00, NULL, NULL, NULL, NULL, '2025-10-30 01:06:19', '2025-10-30 01:07:13'),
+(10, '73ab90983da476db05d79ca5f02ece29', 1, 1, '2025-10-30 01:31:31', '2025-10-30 01:31:42', 'ENDED', 121.00, 120.00, NULL, NULL, NULL, NULL, '2025-10-30 01:31:31', '2025-10-30 01:31:42'),
+(11, '3b70003bc0b3a3dc8e439bcaba702e01', 1, 1, '2025-10-30 01:31:59', NULL, 'ACTIVE', 121.00, NULL, NULL, NULL, NULL, NULL, '2025-10-30 01:31:59', '2025-10-30 01:31:59');
+
+--
 -- 转储表的索引
 --
 
@@ -1320,6 +1384,13 @@ ALTER TABLE `pos_coupons`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uniq_coupon_code` (`coupon_code`),
   ADD KEY `idx_promotion_id` (`promotion_id`);
+
+--
+-- 表的索引 `pos_eod_records`
+--
+ALTER TABLE `pos_eod_records`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_store_time` (`store_id`,`started_at`,`ended_at`);
 
 --
 -- 表的索引 `pos_eod_reports`
@@ -1598,6 +1669,12 @@ ALTER TABLE `pos_coupons`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
+-- 使用表AUTO_INCREMENT `pos_eod_records`
+--
+ALTER TABLE `pos_eod_records`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+--
 -- 使用表AUTO_INCREMENT `pos_eod_reports`
 --
 ALTER TABLE `pos_eod_reports`
@@ -1613,13 +1690,13 @@ ALTER TABLE `pos_held_orders`
 -- 使用表AUTO_INCREMENT `pos_invoices`
 --
 ALTER TABLE `pos_invoices`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=34;
 
 --
 -- 使用表AUTO_INCREMENT `pos_invoice_items`
 --
 ALTER TABLE `pos_invoice_items`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
 
 --
 -- 使用表AUTO_INCREMENT `pos_item_variants`
@@ -1679,7 +1756,7 @@ ALTER TABLE `pos_promotions`
 -- 使用表AUTO_INCREMENT `pos_shifts`
 --
 ALTER TABLE `pos_shifts`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- 限制导出的表
