@@ -5,7 +5,7 @@
  * - 高峰模式：按钮/开关均可用
  * - 兼容旧键：POS_HAND_MODE / POS_LEFTY / POS_RIGHTY
  * - 额外桥接：点击包含 hand_mode 的整行也会触发切换（防止“选中了但未触发事件”）
- * Revision: 2.3.0 (Add printTemplates state)
+ * Revision: 2.3.1 (Add hold i18n keys)
  */
 
 //////////////////// I18N ////////////////////
@@ -22,6 +22,8 @@ export const I18N = {
     platform_code: '平台码', platform_amount: '收款金额', platform_ref: '参考码',
     ops_panel:'功能面板', txn_query:'交易查询', eod:'日结', holds:'挂起单', member:'会员', create_hold:'新建挂起单', no_held_orders:'暂无挂起单', restore:'恢复',
     hold_this: '挂起此单', sort_by_time: '排序: 最近', sort_by_amount: '排序: 金额',
+    hold_placeholder: '输入桌号或备注 (必填)',
+    hold_instruction: '挂起的订单将保留当前购物车内容，稍后可恢复。',
     settings: '设置', peak_mode: '高峰模式 (对比增强)', peak_mode_desc: '左侧菜单变白，并在前方功能按钮保留返回图示，避免误操。',
     lefty_mode: '左手模式 (点菜按钮靠左)', righty_mode: '右手模式 (点菜按钮靠右)',
     no_transactions: '暂无交易记录', issued: '已开具', cancelled: '已作废',
@@ -82,6 +84,8 @@ export const I18N = {
     receivable:'A cobrar', paid:'Cobrado', remaining:'Pendiente', done:'Hecho', cash_input:'Importe efectivo', card_amount:'Importe tarjeta', add_payment_method: 'Añadir otro método',
     platform_code: 'Cód. Plataforma', platform_amount: 'Importe', platform_ref: 'Referencia',
     ops_panel:'Panel de funciones', txn_query:'Consulta', eod:'Cierre', holds:'En espera', member:'Socio', create_hold:'Crear espera', no_held_orders:'Sin pedidos en espera', restore:'Restaurar',
+    hold_placeholder: 'Introduzca nota (obligatorio)',
+    hold_instruction: 'Los pedidos en espera guardarán el carrito actual para restaurarlo más tarde.',
     sort_by_time: 'Ordenar: Reciente', sort_by_amount: 'Ordenar: Importe',
     settings: 'Ajustes', peak_mode: 'Modo Pico (Contraste alto)', peak_mode_desc: 'Mejora legibilidad.',
     lefty_mode: 'Modo Zurdo', righty_mode: 'Modo Diestro',
