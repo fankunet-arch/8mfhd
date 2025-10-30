@@ -202,7 +202,7 @@ async function refreshTxnList() {
     let apiUrl = `api/pos_transaction_handler.php?action=list&start_date=${startDate}&end_date=${endDate}`;
 
     try {
-        const response = await fetch(apiUrl);
+        const response = await fetch(apiUrl, { credentials: 'same-origin' });
         if (!response.ok) { // Catches network-level errors (e.g., 404, 500)
             throw new Error(`Server error: ${response.statusText}`);
         }
@@ -249,7 +249,7 @@ export async function showTxnDetails(id) {
     detailModal.show();
 
     try {
-        const response = await fetch(`api/pos_transaction_handler.php?action=get_details&id=${id}`);
+        const response = await fetch(`api/pos_transaction_handler.php?action=get_details&id=${id}`, { credentials: 'same-origin' });
         const result = await response.json();
         if (result.status === 'success') {
             const d = result.data;

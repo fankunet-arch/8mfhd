@@ -3,7 +3,13 @@ import { toast } from './utils.js';
 
 async function apiCall(url, options = {}) {
     try {
-        const response = await fetch(url, options);
+        // CORE FIX: Add credentials to all API calls to send session cookies
+        const fetchOptions = {
+            ...options,
+            credentials: 'same-origin'
+        };
+
+        const response = await fetch(url, fetchOptions);
         if (!response.ok) {
             let errorData;
             try {

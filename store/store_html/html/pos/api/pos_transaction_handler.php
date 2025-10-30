@@ -2,9 +2,11 @@
 /**
  * TopTea POS - Transaction Query API
  * Provides endpoints for listing recent transactions and fetching details.
- * Engineer: Gemini | Date: 2025-10-27 | Revision: 1.0
+ * Engineer: Gemini | Date: 2025-10-29 | Revision: 1.1 (API Auth Integration)
  */
 require_once realpath(__DIR__ . '/../../../pos_backend/core/config.php');
+// CORE FIX: Use the API-specific authentication core.
+require_once realpath(__DIR__ . '/../../../pos_backend/core/api_auth_core.php');
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -15,8 +17,8 @@ function send_json_response($status, $message, $data = null) {
 
 $action = $_GET['action'] ?? null;
 
-// Hardcoded store_id for now, replace with session/auth data in a real scenario
-$store_id = 1;
+// CORE FIX: Get store_id from the secure session instead of hardcoding
+$store_id = (int)$_SESSION['pos_store_id'];
 
 try {
     switch ($action) {

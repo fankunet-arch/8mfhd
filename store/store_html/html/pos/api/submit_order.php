@@ -1,218 +1,375 @@
 <?php
-/**
- * TopTea POS - Submit Order API
- * Revision: 5.3 (Shift ID Integration)
- * Patched by Gemini · 2025-10-29
- */
-
-require_once realpath(__DIR__ . '/../../../pos_backend/core/config.php');
-// SECURE: Enforce session validation, which also starts the session.
-require_once realpath(__DIR__ . '/../../../pos_backend/core/pos_auth_core.php');
-require_once realpath(__DIR__ . '/../../../pos_backend/services/PromotionEngine.php');
-
+declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
-/**
- * Sends a JSON response and terminates the script.
- */
-function send_json_response($status, $message, $data = null) {
-    echo json_encode(['status' => $status, 'message' => $message, 'data' => $data], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+require_once realpath(__DIR__ . '/../../../pos_backend/core/config.php');
+require_once realpath(__DIR__ . '/../../../pos_backend/core/api_auth_core.php');
+require_once realpath(__DIR__ . '/../../../pos_backend/services/PromotionEngine.php');
+require_once realpath(__DIR__ . '/../../../pos_backend/core/shift_guard.php');
 
-/**
- * Diagnostic helper function.
- */
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+
+// ★ 未开班直接拦截（409）
+ensure_active_shift_or_fail($pdo, 'any');
+
+function send_json_response($status, $message, $data = null, int $http = 200) {
+  http_response_code($http);
+  echo json_encode(['status'=>$status,'message'=>$message,'data'=>$data], JSON_UNESCAPED_UNICODE);
+  exit;
+}
 function diag($msg, $e = null) {
-    $base = 'DIAG_V5.3 :: File: submit_order.php';
-    if ($e instanceof Throwable) return $base . ' :: Line: ' . $e->getLine() . ' :: ' . $e->getMessage();
-    return $base . ' :: ' . $msg;
+  $base = 'DIAG_V5.8 :: File: submit_order.php';
+  if ($e instanceof Throwable) return $base . ' :: Line: ' . $e->getLine() . ' :: ' . $e->getMessage();
+  return $base . ' :: ' . $msg;
 }
 
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); send_json_response('error', 'Invalid request method.'); }
-$raw = file_get_contents('php://input');
-$json_data = json_decode($raw, true);
-if (!$json_data || !isset($json_data['cart']) || !is_array($json_data['cart']) || count($json_data['cart']) === 0) { http_response_code(400); send_json_response('error', 'Cart data is missing or empty.'); }
-
-// SECURITY: shift_id MUST come from the trusted session, not the payload.
-$shift_id = (int)($_SESSION['pos_shift_id'] ?? 0);
-if ($shift_id === 0) {
-    http_response_code(403); // Forbidden
-    send_json_response('error', 'No active shift found for the current user. Cannot process order.');
+/* ---------- 数值解析：支持 €4.50 / 4,50 / 1.234,56 ---------- */
+function to_float($v): float {
+  if (is_int($v) || is_float($v)) return (float)$v;
+  if (!is_string($v)) return 0.0;
+  $s = trim($v);
+  $s = preg_replace('/[^\d\.,\-]/u', '', $s);
+  if (strpos($s, ',') !== false && strpos($s, '.') === false) {
+    $s = str_replace('.', '', $s);
+    $s = str_replace(',', '.', $s);
+  } else {
+    $s = str_replace(',', '', $s);
+  }
+  if ($s === '' || $s === '-' || $s === '.') return 0.0;
+  return is_numeric($s) ? (float)$s : 0.0;
 }
 
+/* ---------- 支付解析：兼容 summary 为“数组”或“对象” ---------- */
+function extract_payment_totals($payment): array {
+  $cash = 0.0; $card = 0.0; $platform = 0.0;
 
+  if (!is_array($payment)) {
+    $tmp = to_float($payment);
+    if ($tmp > 0) $cash += $tmp;
+    $payment = [];
+  }
+
+  // 1) summary = 对象 {cash, card, platform...}
+  if (isset($payment['summary']) && is_array($payment['summary']) && array_values($payment['summary']) !== $payment['summary']) {
+    $s = $payment['summary'];
+    $cash     += to_float($s['cash'] ?? 0);
+    $card     += to_float($s['card'] ?? 0);
+    $platform += to_float($s['platform'] ?? 0)
+               + to_float($s['bizum'] ?? 0) + to_float($s['qr'] ?? 0)
+               + to_float($s['wechat'] ?? 0) + to_float($s['alipay'] ?? 0)
+               + to_float($s['online'] ?? 0) + to_float($s['stripe'] ?? 0)
+               + to_float($s['paypal'] ?? 0);
+  }
+
+  // 2) summary = 数组 [{method:'Cash', amount:4.5}, ...]
+  if (isset($payment['summary']) && is_array($payment['summary']) && array_values($payment['summary']) === $payment['summary']) {
+    foreach ($payment['summary'] as $line) {
+      if (!is_array($line)) continue;
+      $amount = to_float($line['amount'] ?? $line['value'] ?? 0);
+      $m = strtolower((string)($line['method'] ?? $line['type'] ?? $line['channel'] ?? $line['name'] ?? ''));
+      if (in_array($m, ['cash','efectivo'])) $cash += $amount;
+      elseif (in_array($m, ['card','tarjeta'])) $card += $amount;
+      else $platform += $amount; // 其他走平台
+    }
+  }
+
+  // 3) 顶层字段
+  $cash     += to_float($payment['cash'] ?? 0);
+  $card     += to_float($payment['card'] ?? 0);
+  $platform += to_float($payment['platform'] ?? 0)
+             + to_float($payment['bizum'] ?? 0) + to_float($payment['qr'] ?? 0)
+             + to_float($payment['wechat'] ?? 0) + to_float($payment['alipay'] ?? 0)
+             + to_float($payment['online'] ?? 0) + to_float($payment['stripe'] ?? 0)
+             + to_float($payment['paypal'] ?? 0);
+
+  // 4) methods/tenders/lines
+  foreach (['methods','tenders','lines'] as $k) {
+    if (!empty($payment[$k]) && is_array($payment[$k])) {
+      foreach ($payment[$k] as $m) {
+        if (!is_array($m)) continue;
+        $amount = to_float($m['amount'] ?? $m['value'] ?? 0);
+        $t = strtolower((string)($m['type'] ?? $m['method'] ?? $m['channel'] ?? $m['name'] ?? ''));
+        if (in_array($t, ['cash','efectivo'])) $cash += $amount;
+        elseif (in_array($t, ['card','tarjeta'])) $card += $amount;
+        else $platform += $amount;
+      }
+    }
+  }
+
+  // 5) paid / breakdown
+  foreach (['paid','breakdown'] as $obj) {
+    if (!empty($payment[$obj]) && is_array($payment[$obj])) {
+      $o = $payment[$obj];
+      $cash     += to_float($o['cash'] ?? 0);
+      $card     += to_float($o['card'] ?? 0);
+      $platform += to_float($o['platform'] ?? 0)
+                 + to_float($o['bizum'] ?? 0) + to_float($o['qr'] ?? 0)
+                 + to_float($o['wechat'] ?? 0) + to_float($o['alipay'] ?? 0)
+                 + to_float($o['online'] ?? 0) + to_float($o['stripe'] ?? 0)
+                 + to_float($o['paypal'] ?? 0);
+    }
+  }
+
+  // 6) 兜底：仅有 total/paid/change 时，按唯一支付（默认现金）
+  if ($cash == 0.0 && $card == 0.0 && $platform == 0.0) {
+    $total  = to_float($payment['total']  ?? 0);
+    $paid   = to_float($payment['paid']   ?? 0);
+    $change = to_float($payment['change'] ?? 0);
+    $candidate = 0.0;
+    if ($paid > 0 || $change > 0) $candidate = max(0.0, $paid - $change);
+    elseif ($total > 0) $candidate = $total;
+    if ($candidate > 0) $cash = round($candidate, 2);
+  }
+
+  $cash = round($cash, 2); $card = round($card, 2); $platform = round($platform, 2);
+  $sumPaid = round($cash + $card + $platform, 2);
+
+  if (!isset($payment['summary']) || !is_array($payment['summary']) || array_values($payment['summary']) === $payment['summary']) {
+    // 以对象形式写回 summary，方便入库与排错
+    $payment['summary'] = ['cash'=>$cash,'card'=>$card,'platform'=>$platform,'total'=>$sumPaid];
+  } else {
+    $payment['summary']['cash'] = $cash;
+    $payment['summary']['card'] = $card;
+    $payment['summary']['platform'] = $platform;
+    $payment['summary']['total'] = $sumPaid;
+  }
+  return [$cash, $card, $platform, $sumPaid, $payment];
+}
+
+/* ---------- 发票号：优先 counters 表；不存在则回退 MAX+1 ---------- */
+function allocate_invoice_number(PDO $pdo, array $store_config, ?string $compliance_system): array {
+  $system = $compliance_system ?: 'NONE';
+  $series = 'A' . date('Y');
+  $issuer = (string)($store_config['tax_id'] ?? '');
+  $offset = (int)($store_config['invoice_number_offset'] ?? 10000);
+
+  try {
+    // 初始化
+    $sqlInit = "INSERT INTO pos_invoice_counters (compliance_system, series, issuer_nif, current_number)
+                VALUES (:s,:series,:nif,:offset)
+                ON DUPLICATE KEY UPDATE current_number = current_number";
+    $pdo->prepare($sqlInit)->execute([':s'=>$system, ':series'=>$series, ':nif'=>$issuer, ':offset'=>$offset]);
+
+    // 原子自增
+    $sqlBump = "UPDATE pos_invoice_counters
+                SET current_number = LAST_INSERT_ID(current_number + 1)
+                WHERE compliance_system=:s AND series=:series AND issuer_nif=:nif";
+    $pdo->prepare($sqlBump)->execute([':s'=>$system, ':series'=>$series, ':nif'=>$issuer]);
+    $next = (int)$pdo->lastInsertId();
+    if ($next <= 0) throw new RuntimeException('counter bump failed');
+    return [$series, $next];
+
+  } catch (Throwable $e) {
+    // 表不存在或其他问题 → 回退到 MAX+1
+    $stmt_max = $pdo->prepare("SELECT MAX(`number`) FROM pos_invoices WHERE series=:series AND issuer_nif=:nif");
+    $stmt_max->execute([':series'=>$series, ':nif'=>$issuer]);
+    $max = (int)$stmt_max->fetchColumn();
+    $next = ($max === 0 || $max < $offset) ? $offset + 1 : $max + 1;
+    return [$series, $next];
+  }
+}
+
+/* -------------------- 主流程 -------------------- */
 try {
-    // Inputs from session and payload
-    $store_id    = (int)($_SESSION['pos_store_id']);
-    $user_id     = (int)($_SESSION['pos_user_id']);
-    $member_id   = isset($json_data['member_id']) ? (int)$json_data['member_id'] : null;
-    $points_redeemed_from_payload = isset($json_data['points_redeemed']) ? (int)$json_data['points_redeemed'] : 0;
-    $payments    = $json_data['payment']['summary'] ?? [];
-    $couponCode  = null;
-    foreach (['coupon_code','coupon','code','promo_code','discount_code'] as $k) { if (!empty($json_data[$k])) { $couponCode = trim((string)$json_data[$k]); break; } }
+  if ($_SERVER['REQUEST_METHOD'] !== 'POST') send_json_response('error','Invalid request method.',null,405);
 
-    // Fetch store config
-    $stmt_store = $pdo->prepare("SELECT * FROM kds_stores WHERE id = :store_id LIMIT 1");
-    $stmt_store->execute([':store_id' => $store_id]);
-    $store_config = $stmt_store->fetch(PDO::FETCH_ASSOC) ?: [];
-    if (empty($store_config)) { throw new Exception("Store configuration for store_id #{$store_id} not found."); }
+  $raw = file_get_contents('php://input') ?: '';
+  $json_data = json_decode($raw, true);
+  if (!is_array($json_data)) $json_data = $_POST;
 
-    $vat_rate = isset($store_config['default_vat_rate']) ? (float)$store_config['default_vat_rate'] : 21.0;
+  if (!$json_data || empty($json_data['cart']) || !is_array($json_data['cart'])) {
+    send_json_response('error','Cart data is missing or empty.',null,400);
+  }
 
-    // Fetch points earning rule
-    $stmt_settings = $pdo->query("SELECT setting_key, setting_value FROM pos_settings WHERE setting_key = 'points_euros_per_point'");
-    $settings = $stmt_settings->fetchAll(PDO::FETCH_KEY_PAIR);
-    $euros_per_point = isset($settings['points_euros_per_point']) ? (float)$settings['points_euros_per_point'] : 1.0;
-    if ($euros_per_point <= 0) $euros_per_point = 1.0; // Safety fallback
+  $shift_id = (int)($_SESSION['pos_shift_id'] ?? 0);
+  if ($shift_id === 0) send_json_response('error','No active shift found for the current user. Cannot process order.',null,403);
 
-    // Recalculate server-side to ensure integrity
-    $engine = new PromotionEngine($pdo);
-    $promoResult  = $engine->applyPromotions($json_data['cart'], $couponCode);
-    $final_total_after_promo = (float)$promoResult['final_total'];
-    
-    // Server-side points validation & calculation
-    $points_discount_final = 0.0;
-    $points_to_deduct = 0;
-    if ($member_id && $points_redeemed_from_payload > 0) {
-        $stmt_member = $pdo->prepare("SELECT points_balance FROM pos_members WHERE id = ? AND is_active = 1 FOR UPDATE");
-        $stmt_member->execute([$member_id]);
-        $member = $stmt_member->fetch(PDO::FETCH_ASSOC);
+  $store_id = (int)($_SESSION['pos_store_id'] ?? 0);
+  $user_id  = (int)($_SESSION['pos_user_id']  ?? 0);
+  if ($store_id === 0 || $user_id === 0) send_json_response('error','Invalid session.',null,401);
 
-        if ($member) {
-            $current_points = (float)$member['points_balance'];
-            $max_possible_discount = $final_total_after_promo;
-            $max_points_for_discount = floor($max_possible_discount * 100);
-            
-            $points_to_deduct = min($points_redeemed_from_payload, $current_points, $max_points_for_discount);
+  $member_id  = isset($json_data['member_id']) ? (int)$json_data['member_id'] : null;
+  $points_redeemed_from_payload = (int)($json_data['points_redeemed'] ?? 0);
 
-            if ($points_to_deduct > 0) {
-                $points_discount_final = floor($points_to_deduct) / 100.0;
-            } else {
-                $points_to_deduct = 0;
-            }
-        } else {
-            $points_to_deduct = 0;
-        }
+  $couponCode = null;
+  foreach (['coupon_code','coupon','code','promo_code','discount_code'] as $k) {
+    if (!empty($json_data[$k])) { $couponCode = trim((string)$json_data[$k]); break; }
+  }
+
+  // ⬇️ 关键：解析支付（兼容 summary 数组）
+  $payment_payload_raw = $json_data['payment'] ?? $json_data['payments'] ?? [];
+  [$pay_cash, $pay_card, $pay_platform, $sumPaid, $payment_summary] = extract_payment_totals($payment_payload_raw);
+
+  // 门店配置
+  $stmt_store = $pdo->prepare("SELECT * FROM kds_stores WHERE id = :store_id LIMIT 1");
+  $stmt_store->execute([':store_id'=>$store_id]);
+  $store_config = $stmt_store->fetch(PDO::FETCH_ASSOC) ?: [];
+  if (!$store_config) throw new Exception("Store configuration for store_id #{$store_id} not found.");
+  $vat_rate = isset($store_config['default_vat_rate']) ? (float)$store_config['default_vat_rate'] : 21.0;
+
+  // 积分规则
+  $stmt_settings = $pdo->query("SELECT setting_key, setting_value FROM pos_settings WHERE setting_key = 'points_euros_per_point'");
+  $settings = $stmt_settings->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+  $euros_per_point = isset($settings['points_euros_per_point']) ? (float)$settings['points_euros_per_point'] : 1.0;
+  if ($euros_per_point <= 0) $euros_per_point = 1.0;
+
+  // 促销重算
+  $engine = new PromotionEngine($pdo);
+  $promoResult = $engine->applyPromotions($json_data['cart'], $couponCode);
+  $cart = $promoResult['cart'];
+  $discount_from_promo = (float)($promoResult['discount_amount'] ?? 0.0);
+  $final_total_after_promo = (float)($promoResult['final_total'] ?? 0.0);
+
+  $pdo->beginTransaction();
+
+  // 积分抵扣
+  $points_discount_final = 0.0;
+  $points_to_deduct = 0;
+  if ($member_id && $points_redeemed_from_payload > 0) {
+    $stmt_member = $pdo->prepare("SELECT points_balance FROM pos_members WHERE id = ? AND is_active = 1 FOR UPDATE");
+    $stmt_member->execute([$member_id]);
+    if ($m = $stmt_member->fetch(PDO::FETCH_ASSOC)) {
+      $current_points = (int)$m['points_balance'];
+      $max_possible_discount = $final_total_after_promo;
+      $max_points_for_discount = (int)floor($max_possible_discount * 100);
+      $points_to_deduct = min($points_redeemed_from_payload, $current_points, $max_points_for_discount);
+      if ($points_to_deduct > 0) $points_discount_final = $points_to_deduct / 100.0;
+      else $points_to_deduct = 0;
     }
-    
-    $cart = $promoResult['cart'];
-    $final_total = $final_total_after_promo - $points_discount_final;
-    $discount_amount = (float)$promoResult['discount_amount'] + $points_discount_final;
-    $payment_summary = $json_data['payment'];
+  }
 
-    // Compliance logic
-    $compliance_system = $store_config['billing_system'] ?? null;
-    $compliance_data   = null;
-    $qr_payload        = null;
-    $invoice_number    = null;
-    $series            = null;
-    
-    if ($compliance_system) {
-        $handler_path = realpath(__DIR__ . "/../../../pos_backend/compliance/{$compliance_system}Handler.php");
-        if ($handler_path && file_exists($handler_path)) {
-            require_once $handler_path;
-            $class = $compliance_system . 'Handler';
-            if (class_exists($class)) {
-                $handler = new $class();
-                $series = "A" . date('Y');
-                $issuer_nif = $store_config['tax_id'];
-                $stmt_max_num = $pdo->prepare("SELECT MAX(number) FROM pos_invoices WHERE compliance_system = :system AND series = :series AND issuer_nif = :nif");
-                $stmt_max_num->execute([':system' => $compliance_system, ':series' => $series, ':nif' => $issuer_nif]);
-                $max_number = $stmt_max_num->fetchColumn();
-                $invoice_number = ($max_number === null || $max_number < ($store_config['invoice_number_offset'] ?? 0)) ? ($store_config['invoice_number_offset'] ?? 10000) + 1 : $max_number + 1;
-                $stmt_prev = $pdo->prepare("SELECT compliance_data FROM pos_invoices WHERE compliance_system = :system AND series = :series AND issuer_nif = :nif ORDER BY `number` DESC LIMIT 1");
-                $stmt_prev->execute([':system' => $compliance_system, ':series' => $series, ':nif' => $issuer_nif]);
-                $prev_invoice = $stmt_prev->fetch();
-                $previous_hash = $prev_invoice ? (json_decode($prev_invoice['compliance_data'], true)['hash'] ?? null) : null;
-                $invoiceData = ['series' => $series, 'number' => $invoice_number, 'issued_at' => (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('Y-m-d H:i:s.u'), 'final_total' => $final_total];
-                $compliance_data = $handler->generateComplianceData($pdo, $invoiceData, $previous_hash);
-                $qr_payload      = is_array($compliance_data) ? ($compliance_data['qr_content'] ?? null) : null;
-            }
-        }
+  // 应收 = 促销后 - 积分
+  $final_total = round($final_total_after_promo - $points_discount_final, 2);
+  $discount_amount = round($discount_from_promo + $points_discount_final, 2);
+
+  // 支付核对（±0.01）
+  if (abs($sumPaid - $final_total) > 0.01) {
+    $pdo->rollBack();
+    send_json_response('error', 'Payment breakdown does not match final total.', [
+      'final_total'=>$final_total,
+      'sum_paid'=>$sumPaid,
+      'parsed'=>['cash'=>$pay_cash,'card'=>$pay_card,'platform'=>$pay_platform],
+      'keys_hint'=>array_slice(array_keys($payment_payload_raw ?? []), 0, 12)
+    ], 422);
+  }
+
+  // 发票号
+  $compliance_system = $store_config['billing_system'] ?? null;
+  [$series, $invoice_number] = allocate_invoice_number($pdo, $store_config, $compliance_system);
+
+  // 合规（可选）
+  $compliance_data = null;
+  $qr_payload = null;
+  if ($compliance_system) {
+    $handler_path = realpath(__DIR__ . "/../../../pos_backend/compliance/{$compliance_system}Handler.php");
+    if ($handler_path && file_exists($handler_path)) {
+      require_once $handler_path;
+      $class = $compliance_system . 'Handler';
+      if (class_exists($class)) {
+        $issuer_nif = (string)$store_config['tax_id'];
+        $stmt_prev = $pdo->prepare("SELECT compliance_data FROM pos_invoices WHERE compliance_system=:system AND series=:series AND issuer_nif=:nif ORDER BY `number` DESC LIMIT 1");
+        $stmt_prev->execute([':system'=>$compliance_system, ':series'=>$series, ':nif'=>$issuer_nif]);
+        $prev = $stmt_prev->fetch(PDO::FETCH_ASSOC);
+        $previous_hash = $prev ? (json_decode($prev['compliance_data'] ?? '[]', true)['hash'] ?? null) : null;
+
+        $issued_at_micro = (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('Y-m-d H:i:s.u');
+        $invoiceData = ['series'=>$series,'number'=>$invoice_number,'issued_at'=>$issued_at_micro,'final_total'=>$final_total];
+
+        $handler = new $class();
+        $compliance_data = $handler->generateComplianceData($pdo, $invoiceData, $previous_hash);
+        if (is_array($compliance_data)) $qr_payload = $compliance_data['qr_content'] ?? null;
+      }
     }
+  }
 
-    $pdo->beginTransaction();
+  // 发票主表
+  $issued_at = (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('Y-m-d H:i:s');
+  $taxable_base = round($final_total / (1 + ($vat_rate / 100)), 2);
+  $vat_amount   = round($final_total - $taxable_base, 2);
 
-    // 1. Create Invoice with shift_id
-    $issued_at = date('Y-m-d H:i:s');
-    $taxable_base = round($final_total / (1 + ($vat_rate / 100)), 2);
-    $vat_amount = $final_total - $taxable_base;
+  $stmt_invoice = $pdo->prepare("
+    INSERT INTO pos_invoices (
+      invoice_uuid, store_id, user_id, shift_id,
+      issuer_nif, series, `number`, issued_at, invoice_type,
+      taxable_base, vat_amount, discount_amount, final_total,
+      status, compliance_system, compliance_data, payment_summary
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  ");
+  $stmt_invoice->execute([
+    bin2hex(random_bytes(16)),
+    $store_id, $user_id, $shift_id,
+    (string)$store_config['tax_id'],
+    $series, $invoice_number, $issued_at, 'F2',
+    $taxable_base, $vat_amount, $discount_amount, $final_total,
+    'ISSUED', $compliance_system, json_encode($compliance_data, JSON_UNESCAPED_UNICODE),
+    json_encode($payment_summary, JSON_UNESCAPED_UNICODE)
+  ]);
+  $invoice_id = (int)$pdo->lastInsertId();
 
-    $stmt_invoice = $pdo->prepare("
-        INSERT INTO pos_invoices (invoice_uuid, store_id, user_id, shift_id, issuer_nif, series, `number`, issued_at, invoice_type, taxable_base, vat_amount, discount_amount, final_total, status, compliance_system, compliance_data, payment_summary)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt_invoice->execute([
-        bin2hex(random_bytes(16)), $store_id, $user_id, $shift_id, $store_config['tax_id'], $series, $invoice_number, $issued_at, 'F2', $taxable_base, $vat_amount, $discount_amount, $final_total, 'ISSUED', $compliance_system, json_encode($compliance_data), json_encode($payment_summary)
-    ]);
-    $invoice_id = (int)$pdo->lastInsertId();
+  // 明细
+  $sql_item = "INSERT INTO pos_invoice_items
+      (invoice_id, item_name, variant_name, quantity, unit_price, unit_taxable_base, vat_rate, vat_amount, customizations)
+      VALUES (?,?,?,?,?,?,?,?,?)";
+  $stmt_item = $pdo->prepare($sql_item);
 
-    // 2. Create Invoice Items
-    $sql_item = "INSERT INTO pos_invoice_items (invoice_id, item_name, variant_name, quantity, unit_price, unit_taxable_base, vat_rate, vat_amount, customizations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $stmt_item = $pdo->prepare($sql_item);
+  foreach ($cart as $item) {
+    $qty = max(1, (int)($item['qty'] ?? 1));
+    $unit_price = (float)($item['final_price'] ?? $item['unit_price_eur'] ?? 0);
+    $item_total = round($unit_price * $qty, 2);
 
-    foreach ($cart as $item) {
-        $final_unit_price = (float)($item['final_price'] ?? $item['unit_price_eur'] ?? 0);
-        $item_total = $final_unit_price * ($item['qty'] ?? 1);
-        $item_taxable_base_total = round($item_total / (1 + ($vat_rate / 100)), 2);
-        $item_vat_amount = $item_total - $item_taxable_base_total;
-        $customizations_for_db = ['ice' => $item['ice'] ?? null, 'sugar' => $item['sugar'] ?? null, 'addons' => $item['addons'] ?? [], 'remark' => $item['remark'] ?? ''];
-        
-        $stmt_item->execute([
-            $invoice_id,
-            (string)($item['title'] ?? ($item['name'] ?? '')),
-            (string)($item['variant_name'] ?? ''),
-            (int)($item['qty'] ?? 1),
-            $final_unit_price,
-            round($item_taxable_base_total / ($item['qty'] ?? 1), 4),
-            $vat_rate,
-            $item_vat_amount,
-            json_encode($customizations_for_db, JSON_UNESCAPED_UNICODE)
-        ]);
-    }
+    $item_tax_base_total = round($item_total / (1 + ($vat_rate / 100)), 2);
+    $item_vat_amount = round($item_total - $item_tax_base_total, 2);
+    $unit_tax_base = round($item_tax_base_total / $qty, 4);
 
-    // 3. Member Points Logic (Accumulation & Redemption)
-    if ($member_id) {
-        if ($points_to_deduct > 0 && $points_discount_final > 0) {
-            $stmt_deduct_points = $pdo->prepare("UPDATE pos_members SET points_balance = points_balance - ? WHERE id = ?");
-            $stmt_deduct_points->execute([$points_to_deduct, $member_id]);
-
-            $stmt_log_deduction = $pdo->prepare("
-                INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, notes, user_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ");
-            $stmt_log_deduction->execute([$member_id, $invoice_id, -$points_to_deduct, 'REDEEM_DISCOUNT', "兑换抵扣 {$points_discount_final} EUR", $user_id]);
-        }
-        
-        if ($final_total > 0) {
-            $points_to_add = floor($final_total / $euros_per_point); 
-            if ($points_to_add > 0) {
-                $stmt_add_points = $pdo->prepare("UPDATE pos_members SET points_balance = points_balance + ? WHERE id = ?");
-                $stmt_add_points->execute([$points_to_add, $member_id]);
-
-                $stmt_log_addition = $pdo->prepare("
-                    INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, user_id)
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $stmt_log_addition->execute([$member_id, $invoice_id, $points_to_add, 'PURCHASE', $user_id]);
-            }
-        }
-    }
-    
-    $pdo->commit();
-
-    $resp = [
-        'invoice_id' => $invoice_id,
-        'invoice_number' => ($series ?? '') . '-' . ($invoice_number ?? $invoice_id),
-        'qr_content' => $qr_payload,
+    $custom = [
+      'ice'    => $item['ice']    ?? null,
+      'sugar'  => $item['sugar']  ?? null,
+      'addons' => $item['addons'] ?? [],
+      'remark' => $item['remark'] ?? ''
     ];
 
-    send_json_response('success', 'Order created.', $resp);
+    $stmt_item->execute([
+      $invoice_id,
+      (string)($item['title'] ?? ($item['name'] ?? '')),
+      (string)($item['variant_name'] ?? ''),
+      $qty,
+      $unit_price,
+      $unit_tax_base,
+      $vat_rate,
+      $item_vat_amount,
+      json_encode($custom, JSON_UNESCAPED_UNICODE)
+    ]);
+  }
+
+  // 积分扣减与累计
+  if ($member_id && $points_to_deduct > 0 && $points_discount_final > 0) {
+    $pdo->prepare("UPDATE pos_members SET points_balance = points_balance - ? WHERE id = ?")
+        ->execute([$points_to_deduct, $member_id]);
+    $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, notes, user_id)
+                   VALUES (?,?,?,?,?,?)")
+        ->execute([$member_id, $invoice_id, -$points_to_deduct, 'REDEEM_DISCOUNT', "兑换抵扣 {$points_discount_final} EUR", $user_id]);
+  }
+  if ($member_id && $final_total > 0) {
+    $points_to_add = (int)floor($final_total / $euros_per_point);
+    if ($points_to_add > 0) {
+      $pdo->prepare("UPDATE pos_members SET points_balance = points_balance + ? WHERE id = ?")
+          ->execute([$points_to_add, $member_id]);
+      $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, user_id)
+                     VALUES (?,?,?,?,?)")
+          ->execute([$member_id, $invoice_id, $points_to_add, 'PURCHASE', $user_id]);
+    }
+  }
+
+  $pdo->commit();
+
+  send_json_response('success','Order created.',[
+    'invoice_id'=>$invoice_id,
+    'invoice_number'=>$series.'-'.$invoice_number,
+    'qr_content'=>$qr_payload
+  ]);
 
 } catch (Throwable $e) {
-    if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-    http_response_code(500);
-    send_json_response('error', 'Failed to create order.', ['debug' => diag('', $e)]);
+  if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+  error_log('submit_order error: '.$e->getMessage());
+  send_json_response('error','Failed to create order.',['debug'=>diag('', $e)],500);
 }

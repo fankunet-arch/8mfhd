@@ -10,7 +10,8 @@ import { openTxnQueryPanel, showTxnDetails, initializeRefundModal } from './modu
 import { handleSettingChange } from './modules/settings.js';
 import { findMember, unlinkMember, showCreateMemberModal, createMember } from './modules/member.js';
 import { initializePrintSimulator, printReceipt } from './modules/print.js';
-import { checkShiftStatus, initializeShiftModals, handleStartShift } from './modules/shift.js'; // Import handleStartShift
+// CORE FIX: Correctly import handleStartShift
+import { checkShiftStatus, initializeShiftModals, handleStartShift } from './modules/shift.js'; 
 
 console.log("Modules imported successfully in main.js");
 
@@ -323,6 +324,8 @@ function bindEvents() {
   });
 
   // --- CORE FIX: Robust Shift Management Event Binding ---
+  // The event is delegated from the document to the form's submit event.
+  // This is robust and does not depend on the button's location in the DOM.
   $document.on('submit', '#start_shift_form', handleStartShift);
 
   // --- Settings ---
@@ -335,7 +338,7 @@ async function initApplication() {
     console.log("initApplication started.");
     try {
         console.log("Checking EOD status...");
-        const eodStatusResponse = await fetch('./api/check_eod_status.php');
+        const eodStatusResponse = await fetch('./api/check_eod_status.php', { credentials: 'same-origin' });
         const eodStatusResult = await eodStatusResponse.json();
         console.log("EOD status result:", eodStatusResult);
 

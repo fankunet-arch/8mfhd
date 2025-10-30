@@ -40,3 +40,8 @@ try {
 if (!defined('APP_TZ')) {
     define('APP_TZ', 'Europe/Madrid');
 }
+
+// 班次策略：force_all | force_cash | optional
+if (!defined('SHIFT_POLICY')) {
+  define('SHIFT_POLICY', 'force_all'); // ← 强制所有交易必须在班次内
+}

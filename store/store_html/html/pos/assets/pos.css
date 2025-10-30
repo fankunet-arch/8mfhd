@@ -241,3 +241,5 @@ body.contrast-boost{
 .eod-block-footer .btn {
     min-height: calc(var(--tap) * 0.9); /* 按钮稍微小一点 */
 }
+
+#paymentConfirmModal .fs-5 { letter-spacing:.2px; }

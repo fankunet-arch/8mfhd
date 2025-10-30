@@ -33,7 +33,7 @@ export async function refreshHeldOrdersList() {
     const listContainer = document.getElementById('held_orders_list');
     listContainer.innerHTML = '<div class="text-center p-4"><div class="spinner-border spinner-border-sm"></div></div>';
     try {
-        const response = await fetch(`api/pos_hold_handler.php?action=list&sort=${STATE.holdSortBy}`);
+        const response = await fetch(`api/pos_hold_handler.php?action=list&sort=${STATE.holdSortBy}`, { credentials: 'same-origin' });
         const result = await response.json();
 
         if (result.status === 'success') {
@@ -95,6 +95,7 @@ export async function createHoldOrder() {
         const response = await fetch('api/pos_hold_handler.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({ action: 'save', note: note, cart: STATE.cart })
         });
         const result = await response.json();
@@ -128,7 +129,7 @@ export async function restoreHeldOrder(id) {
     }
 
     try {
-        const response = await fetch(`api/pos_hold_handler.php?action=restore&id=${id}`);
+        const response = await fetch(`api/pos_hold_handler.php?action=restore&id=${id}`, { credentials: 'same-origin' });
         const result = await response.json();
 
         if (result.status === 'success') {

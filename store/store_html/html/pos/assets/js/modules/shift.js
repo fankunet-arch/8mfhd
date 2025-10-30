@@ -1,191 +1,159 @@
-import { STATE } from '../state.js';
-import { t, fmtEUR, toast } from '../utils.js';
-import { fetchPrintTemplates } from '../api.js';
+// TopTea POS · shift.js
+// v1.7.0 — 无班次禁止一切操作；开班弹窗不可关闭；交接班完成后强制回到“未开班”状态
 
-// Module-level state
+import { toast } from '../utils.js';
+
 let startShiftModal = null;
-let endShiftModal = null;
-let currentShiftSummary = null;
+let endShiftModal   = null;
+let HAS_ACTIVE_SHIFT = false;
 
-/**
- * Initializes the shift module, gets modal instances.
- * Event binding is now handled by main.js for robustness.
- */
+const POLICY = (window.SHIFT_POLICY || 'force_all'); // 默认为最严格
+
+/** 创建“不可关闭”的开班弹窗（static + keyboard:false，且拦截 hide 事件） */
+function getNonClosableStartModal() {
+  const el = document.getElementById('startShiftModal');
+  if (!el) return null;
+
+  // 删除关闭按钮/取消按钮（如果存在）
+  el.querySelector('.btn-close')?.classList.add('d-none');
+  el.querySelector('[data-role="btn-cancel-start"]')?.classList.add('d-none');
+
+  // 用 static + keyboard:false 禁用点击遮罩/ESC 关闭
+  const m = bootstrap.Modal.getOrCreateInstance(el, { backdrop: 'static', keyboard: false });
+
+  // 拦截尝试关闭（只要还未开班，就不允许关闭）
+  el.addEventListener('hide.bs.modal', (ev) => {
+    if (POLICY !== 'optional' && !HAS_ACTIVE_SHIFT) {
+      ev.preventDefault();
+    }
+  });
+
+  return m;
+}
+
+/** 初始化（在 main.js 的启动流程中调用） */
 export function initializeShiftModals() {
-    const startModalEl = document.getElementById('startShiftModal');
-    const endModalEl = document.getElementById('endShiftModal');
+  const startEl = document.getElementById('startShiftModal');
+  const endEl   = document.getElementById('endShiftModal');
 
-    if (startModalEl) {
-        startShiftModal = new bootstrap.Modal(startModalEl, {
-            backdrop: 'static', // Prevents closing by clicking outside
-            keyboard: false // Prevents closing with Esc key
-        });
-    }
+  if (startEl && !startShiftModal) {
+    startShiftModal = getNonClosableStartModal();
+  }
+  if (endEl && !endShiftModal) {
+    endShiftModal = bootstrap.Modal.getOrCreateInstance(endEl);
+  }
 
-    if (endModalEl) {
-        endShiftModal = new bootstrap.Modal(endModalEl);
-    }
-    
-    // Refresh summary when end shift modal is shown
-    if (endModalEl) {
-        endModalEl.addEventListener('show.bs.modal', fetchShiftSummary);
-    }
+  const startForm = document.getElementById('start_shift_form');
+  if (startForm) startForm.addEventListener('submit', handleStartShift);
+
+  const endForm = document.getElementById('end_shift_form');
+  if (endForm) endForm.addEventListener('submit', handleEndShift);
 }
 
-/**
- * Checks the user's shift status with the backend.
- * This is the entry point for the shift logic.
- */
+/** 启动时或状态变化时检查班次状态 */
 export async function checkShiftStatus() {
-    try {
-        const response = await fetch('api/pos_shift_handler.php?action=status');
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            if (!result.data.has_active_shift) {
-                // If no active shift, force the user to start one.
-                if (startShiftModal) {
-                    startShiftModal.show();
-                } else {
-                    console.error('Start Shift Modal not found!');
-                }
-            }
-        } else {
-            toast(`Error checking shift status: ${result.message}`);
-        }
-    } catch (error) {
-        toast(`Network error checking shift status: ${error.message}`);
+  try {
+    const resp = await fetch('./api/pos_shift_handler.php?action=status', { credentials: 'same-origin' });
+    const result = await resp.json();
+    if (result.status !== 'success') {
+      console.warn('checkShiftStatus error:', result.message);
+      return;
     }
+    HAS_ACTIVE_SHIFT = !!(result.data && result.data.has_active_shift);
+
+    if (!HAS_ACTIVE_SHIFT) {
+      // 未开班：弹出不可关闭的开班弹窗
+      if (!startShiftModal) startShiftModal = getNonClosableStartModal();
+      startShiftModal?.show();
+    } else {
+      // 已开班：确保开班弹窗被关闭（如果还开着）
+      try { startShiftModal?.hide(); } catch(_) {}
+    }
+  } catch (err) {
+    console.warn('checkShiftStatus network error:', err);
+  }
 }
 
-/**
- * Handles the submission of the "Start Shift" form.
- * Exported to be called from main.js event handler.
- */
-export async function handleStartShift(event) {
-    event.preventDefault();
-    const startingFloatInput = document.getElementById('starting_float');
-    const startingFloat = parseFloat(startingFloatInput.value);
+/** 开始当班 */
+export async function handleStartShift(e) {
+  e.preventDefault();
+  const input = document.getElementById('starting_float');
+  const val = parseFloat(input?.value);
+  if (isNaN(val) || val < 0) {
+    toast('请输入有效的初始备用金');
+    return;
+  }
 
-    if (isNaN(startingFloat) || startingFloat < 0) {
-        toast('请输入有效的初始备用金金额。');
-        return;
+  try {
+    const resp = await fetch('./api/pos_shift_handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ action: 'start', starting_float: val })
+    });
+    const result = await resp.json();
+
+    if (resp.ok && result.status === 'success') {
+      HAS_ACTIVE_SHIFT = true;
+      try { startShiftModal?.hide(); } catch(_) {}
+      await checkShiftStatus(); // 刷新状态
+      toast('已开始当班');
+    } else {
+      toast(`开始当班失败：${result.message || `HTTP ${resp.status}`}`);
     }
-
-    const submitBtn = event.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-
-    try {
-        const response = await fetch('api/pos_shift_handler.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'start', starting_float: startingFloat })
-        });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            toast('开班成功！');
-            startShiftModal.hide();
-            // Reload the page to ensure all states are correct
-            window.location.reload();
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (error) {
-        toast(`开班失败: ${error.message}`);
-        submitBtn.disabled = false;
-    }
+  } catch (err) {
+    toast(`网络错误：${err.message}`);
+  }
 }
 
-/**
- * Fetches the summary for the current active shift to display in the "End Shift" modal.
- */
-async function fetchShiftSummary() {
-    const summaryBody = document.getElementById('end_shift_summary_body');
-    summaryBody.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+/** 结束当班 / 交接班 */
+export async function handleEndShift(e) {
+  e.preventDefault();
+  const input = document.getElementById('counted_cash');
+  const val = parseFloat(input?.value);
+  if (isNaN(val) || val < 0) {
+    toast('请填写正确的清点现金金额');
+    return;
+  }
 
-    try {
-        const response = await fetch('api/pos_shift_handler.php?action=summary');
-        const result = await response.json();
+  try {
+    const resp = await fetch('./api/pos_shift_handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ action: 'end', counted_cash: val })
+    });
+    const result = await resp.json();
 
-        if (result.status === 'success') {
-            currentShiftSummary = result.data;
-            const startingFloat = parseFloat(document.getElementById('startShiftModal') ? // A bit of a hack to get starting float
-                (document.getElementById('starting_float')?.dataset?.initialValue || 0) : 
-                (currentShiftSummary.starting_float || 0)
-            );
+    if (result.status === 'success') {
+      // 关闭交接班弹窗（带兜底）
+      const endEl = document.getElementById('endShiftModal');
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        if (endEl) endEl.addEventListener('hidden.bs.modal', finish, { once: true });
+        setTimeout(finish, 900);
+        try { endShiftModal?.hide(); } catch(_) { /* no-op */ }
+      });
 
-            const expectedCash = startingFloat + (currentShiftSummary.payment_summary.Cash || 0);
+      // 广播“交接班完成”，由 eod.js 弹出“交接班完成”提示
+      const payload = result.data || {};
+      document.dispatchEvent(new CustomEvent('pos:eod-finished', {
+        detail: { eod: payload.eod, eod_id: payload.eod_id }
+      }));
 
-            const summaryHtml = `
-                <p><strong>总交易笔数:</strong> ${currentShiftSummary.sales_summary.transactions_count}</p>
-                <p><strong>净销售额:</strong> ${fmtEUR(currentShiftSummary.sales_summary.net_sales)}</p>
-                <hr>
-                <h6>收款方式汇总</h6>
-                <p>现金收款: ${fmtEUR(currentShiftSummary.payment_summary.Cash)}</p>
-                <p>刷卡收款: ${fmtEUR(currentShiftSummary.payment_summary.Card)}</p>
-                <p>平台收款: ${fmtEUR(currentShiftSummary.payment_summary.Platform)}</p>
-                <hr>
-                <h6>现金核对</h6>
-                <p>初始备用金: ${fmtEUR(startingFloat)}</p>
-                <p class="fw-bold">系统应有现金: ${fmtEUR(expectedCash)}</p>
-            `;
-            summaryBody.innerHTML = summaryHtml;
-            
-            const countedCashInput = document.getElementById('counted_cash');
-            countedCashInput.addEventListener('input', () => {
-                const counted = parseFloat(countedCashInput.value) || 0;
-                const variance = counted - expectedCash;
-                const varianceEl = document.getElementById('cash_variance_display');
-                varianceEl.textContent = fmtEUR(variance);
-                varianceEl.className = variance < 0 ? 'text-danger fw-bold' : 'text-success fw-bold';
-            });
-
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (error) {
-        summaryBody.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+      // 交接班后立即进入“未开班”状态并强制弹开班弹窗
+      HAS_ACTIVE_SHIFT = false;
+      await checkShiftStatus();
+    } else {
+      toast(`结束当班失败：${result.message || 'Unknown error'}`);
     }
+  } catch (err) {
+    toast(`网络错误：${err.message}`);
+  }
 }
 
-/**
- * Handles the submission of the "End Shift" form.
- */
-async function handleEndShift(event) {
-    event.preventDefault();
-    const countedCashInput = document.getElementById('counted_cash');
-    const countedCash = parseFloat(countedCashInput.value);
-
-    if (isNaN(countedCash) || countedCash < 0) {
-        toast('请输入有效的清点现金金额。');
-        return;
-    }
-
-    const submitBtn = event.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-
-    try {
-        const response = await fetch('api/pos_shift_handler.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'end', counted_cash: countedCash })
-        });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            toast('交班成功，系统将自动退出。');
-            // Here you would typically trigger the printing of the shift report
-            // For now, we just log out.
-            setTimeout(() => {
-                window.location.href = 'logout.php';
-            }, 2000);
-        } else {
-            throw new Error(result.message);
-        }
-
-    } catch (error) {
-        toast(`交班失败: ${error.message}`);
-        submitBtn.disabled = false;
-    }
+/** 可选：回调注册 */
+export function onEodFinished(callback) {
+  document.addEventListener('pos:eod-finished', (e) => callback(e.detail));
 }
