@@ -1,8 +1,8 @@
 <?php
 /**
  * TopTea POS - Main Entry Point
- * Engineer: Gemini | Date: 2025-10-29
- * Revision: 3.1 (Shift/Login Flow Integration)
+ * Engineer: Gemini | Date: 2025-10-30
+ * Revision: 3.4 (Quick Cash & UI Polish)
  */
 
 // This MUST be the first include. It checks if the user is logged in.
@@ -93,7 +93,11 @@ $cache_version = time();
 
   <div class="modal fade" id="orderSuccessModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"><div class="modal-dialog modal-dialog-centered"><div class="modal-content modal-sheet"><div class="modal-body text-center p-4"><i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i><h3 class="mt-3" data-i18n="order_success">下单成功</h3><p class="text-muted" data-i18n="invoice_number">票号</p><h4 class="mb-3" id="success_invoice_number">--</h4><p class="text-muted small" data-i18n="qr_code_info">合规二维码内容 (TicketBAI/Veri*Factu)</p><div class="p-2 bg-light rounded border"><code id="success_qr_content" style="word-break: break-all;">-</code></div><button type="button" class="btn btn-brand w-100 mt-4" data-bs-dismiss="modal" data-i18n="new_order">开始新订单</button></div></div></div></div>
 
-  <div class="modal fade" id="paymentModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"><div class="modal-dialog modal-dialog-centered"><div class="modal-content modal-sheet"><div class="modal-header"><h5 class="modal-title" data-i18n="checkout">结账</h5><button type="button" class="btn-close" data-bs-dismiss="modal" id="btn_cancel_payment"></button></div><div class="modal-body p-4"><div class="row text-center mb-3"><div class="col"><small data-i18n="receivable">应收</small><div class="fs-4 fw-bold text-brand" id="payment_total_display">€0.00</div></div><div class="col"><small data-i18n="paid">已收</small><div class="fs-4 fw-bold" id="payment_paid_display">€0.00</div></div><div class="col"><small data-i18n="remaining">剩余</small><div class="fs-4 fw-bold text-info" id="payment_remaining_display">€0.00</div></div><div class="col"><small data-i18n="change">找零</small><div class="fs-4 fw-bold" id="payment_change_display">€0.00</div></div></div><div id="payment_parts_container" class="mb-3"></div><div class="mb-2"><small class="text-muted" data-i18n="add_payment_method">添加其它方式</small></div><div id="payment_method_selector" class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" data-pay-method="Cash"><i class="bi bi-cash-coin me-1"></i><span data-i18n="cash_payment">现金</span></button><button class="btn btn-outline-primary" data-pay-method="Card"><i class="bi bi-credit-card me-1"></i><span data-i18n="card_payment">刷卡</span></button><button class="btn btn-outline-primary" data-pay-method="Bizum" disabled><i class="bi bi-phone me-1"></i>Bizum</button><button class="btn btn-outline-primary" data-pay-method="Platform"><i class="bi bi-qr-code me-1"></i><span data-i18n="platform_code">平台码</span></button></div></div><div class="modal-footer d-grid"><button type="button" id="btnConfirmPay" class="btn btn-primary w-100">确认收款</button></div></div></div></div>
+  <div class="modal fade" id="paymentModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"><div class="modal-dialog modal-dialog-centered"><div class="modal-content modal-sheet"><div class="modal-header"><h5 class="modal-title" data-i18n="checkout">结账</h5><button type="button" class="btn-close" data-bs-dismiss="modal" id="btn_cancel_payment"></button></div><div class="modal-body p-4"><div class="row text-center mb-3"><div class="col"><small data-i18n="receivable">应收</small><div class="fs-4 fw-bold text-brand" id="payment_total_display">€0.00</div></div><div class="col"><small data-i18n="paid">已收</small><div class="fs-4 fw-bold" id="payment_paid_display">€0.00</div></div><div class="col"><small data-i18n="remaining">剩余</small><div class="fs-4 fw-bold text-info" id="payment_remaining_display">€0.00</div></div><div class="col"><small data-i18n="change">找零</small><div class="fs-4 fw-bold" id="payment_change_display">€0.00</div></div></div><div id="payment_parts_container" class="mb-3"></div>
+  
+  <div class="mb-3"><small class="text-muted">快捷现金</small><div class="d-flex flex-wrap gap-2 mt-1"><button class="btn btn-outline-secondary btn-quick-cash" data-value="5">€5</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="10">€10</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="20">€20</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="50">€50</button></div></div>
+
+  <div class="mb-2"><small class="text-muted" data-i18n="add_payment_method">添加其它方式</small></div><div id="payment_method_selector" class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" data-pay-method="Cash"><i class="bi bi-cash-coin me-1"></i><span data-i18n="cash_payment">现金</span></button><button class="btn btn-outline-primary" data-pay-method="Card"><i class="bi bi-credit-card me-1"></i><span data-i18n="card_payment">刷卡</span></button><button class="btn btn-outline-primary" data-pay-method="Bizum" disabled><i class="bi bi-phone me-1"></i>Bizum</button><button class="btn btn-outline-primary" data-pay-method="Platform"><i class="bi bi-qr-code me-1"></i><span data-i18n="platform_code">平台码</span></button></div></div><div class="modal-footer d-grid"><button type="button" id="btn_confirm_payment" class="btn btn-primary w-100">确认收款</button></div></div></div></div>
   <div id="payment_templates" class="d-none"><div class="payment-part card card-body mb-2" data-method="Cash"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-cash-coin me-2"></i><span data-i18n="cash_payment">现金</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="payment-part card card-body mb-2" data-method="Card"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-credit-card me-2"></i><span data-i18n="card_payment">刷卡</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="payment-part card card-body mb-2" data-method="Platform"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-qr-code me-2"></i><span data-i18n="platform_code">平台码</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><div class="row g-2"><div class="col-7"><label class="form-label small" data-i18n="platform_amount">收款金额</label><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="col-5"><label class="form-label small" data-i18n="platform_ref">参考码</label><input type="text" class="form-control form-control-lg text-center payment-part-ref" placeholder="输入码"></div></div></div></div>
 
   <div class="offcanvas offcanvas-end offcanvas-sheet" tabindex="-1" id="holdOrdersOffcanvas">
@@ -149,13 +153,8 @@ $cache_version = time();
       </div>
     </div>
   </div>
-  <div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="sys_toast" class="toast" role="alert"><div class="toast-body" id="toast_msg"></div></div></div>
-
-  <script type="module" src="./assets/js/main.js?v=<?php echo $cache_version; ?>"></script>
-</body>
-
-
-<div class="modal fade" id="startShiftModal" tabindex="-1" aria-labelledby="startShiftModalLabel" aria-hidden="true">
+  
+  <div class="modal fade" id="startShiftModal" tabindex="-1" aria-labelledby="startShiftModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content modal-sheet">
         <div class="modal-header">
@@ -218,12 +217,8 @@ $cache_version = time();
       </div>
     </div>
   </div>
-  <div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="sys_toast" class="toast" role="alert"><div class="toast-body" id="toast_msg"></div></div></div>
-
-  <script type="module" src="./assets/js/main.js?v=<?php echo $cache_version; ?>"></script>
-
-  <!-- 交接班结果摘要 -->
-<div class="modal fade" id="eodResultModal" tabindex="-1" aria-hidden="true">
+  
+  <div class="modal fade" id="eodResultModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
@@ -253,7 +248,6 @@ $cache_version = time();
         </div>
       </div>
       <div class="modal-footer">
-        <!-- 可选：一个“查看历史”按钮 -->
         <button type="button" class="btn btn-outline-secondary" id="btnViewEodHistory">查看交接班记录</button>
         <button type="button" class="btn btn-primary" data-bs-dismiss="modal">知道了</button>
       </div>
@@ -261,7 +255,6 @@ $cache_version = time();
   </div>
 </div>
 
-<!-- 最近交接班记录 -->
 <div class="modal fade" id="eodHistoryModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -285,7 +278,7 @@ $cache_version = time();
                 <th class="text-end">差异</th>
               </tr>
             </thead>
-            <tbody><!-- JS 填充 --></tbody>
+            <tbody></tbody>
           </table>
         </div>
       </div>
@@ -296,7 +289,6 @@ $cache_version = time();
   </div>
 </div>
 
-<!-- 收款确认 Modal -->
 <div class="modal fade" id="paymentConfirmModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -324,7 +316,7 @@ $cache_version = time();
 
         <div class="border rounded p-2 mb-2">
           <div class="d-flex justify-content-between small text-muted">
-            <span>收款方式</span><span>金额</span>
+            <span>收款方式</span><span>入账金额</span>
           </div>
           <div id="pc-methods"><div class="small text-muted">—</div></div>
         </div>
@@ -346,8 +338,9 @@ $cache_version = time();
   </div>
 </div>
 
-<!-- 引入新脚本 -->
-<script src="/pos/assets/js/payment_confirm.js?v=1.0"></script>
+<div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="sys_toast" class="toast" role="alert"><div class="toast-body" id="toast_msg"></div></div></div>
+
+<script type="module" src="./assets/js/main.js?v=<?php echo $cache_version; ?>"></script>
 
 </body>
 </html>

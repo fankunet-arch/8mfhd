@@ -3,14 +3,13 @@ import { applyI18N, renderCategories, renderProducts, renderAddons, openCustomiz
 import { fetchInitialData, fetchPrintTemplates, fetchEodPrintData } from './api.js';
 import { t, toast } from './utils.js';
 import { addToCart, updateCartItem, calculatePromotions } from './modules/cart.js';
-import { openPaymentModal, addPaymentPart, updatePaymentState, submitOrder } from './modules/payment.js';
+import { openPaymentModal, addPaymentPart, updatePaymentState, initiatePaymentConfirmation, handleQuickCash } from './modules/payment.js';
 import { openHoldOrdersPanel, createHoldOrder, restoreHeldOrder, refreshHeldOrdersList } from './modules/hold.js';
 import { openEodModal, openEodConfirmationModal, submitEodReportFinal, handlePrintEodReport } from './modules/eod.js';
 import { openTxnQueryPanel, showTxnDetails, initializeRefundModal } from './modules/transactions.js';
 import { handleSettingChange } from './modules/settings.js';
 import { findMember, unlinkMember, showCreateMemberModal, createMember } from './modules/member.js';
 import { initializePrintSimulator, printReceipt } from './modules/print.js';
-// CORE FIX: Correctly import handleStartShift
 import { checkShiftStatus, initializeShiftModals, handleStartShift } from './modules/shift.js'; 
 
 console.log("Modules imported successfully in main.js");
@@ -21,6 +20,8 @@ I18N_NS.zh = I18N_NS.zh || {};
 I18N_NS.es = I18N_NS.es || {};
 
 Object.assign(I18N_NS.zh, {
+  payment_success: '支付成功',
+  payment_methods_label: '支付方式',
   internal:'Internal', lang_zh:'中文', lang_es:'Español', cart:'购物车', total_before_discount:'合计', more:'功能',
   customizing:'正在定制', size: '规格', addons:'加料', remark:'备注（可选）', ice: '冰量', sugar: '糖度',
   curr_price:'当前价格', add_to_cart:'加入购物车', placeholder_search:'搜索饮品或拼音简称…',
@@ -118,6 +119,8 @@ Object.assign(I18N_NS.zh, {
   shift_end_fail: '交班失败'
 });
 Object.assign(I18N_NS.es, {
+   payment_success: 'Pago completado',
+   payment_methods_label: 'Métodos de Pago',
    internal:'Interno', lang_zh:'Chino', lang_es:'Español', cart:'Carrito', total_before_discount:'Total', more:'Más',
   customizing:'Personalizando', size: 'Tamaño', addons:'Extras', remark:'Observaciones (opc.)', ice: 'Hielo', sugar: 'Azúcar',
   curr_price:'Precio actual', add_to_cart:'Añadir al carrito', placeholder_search:'Buscar bebida o abreviatura…',
@@ -161,7 +164,7 @@ Object.assign(I18N_NS.es, {
   query: 'Consultar',
   validation_date_range_too_large: 'El rango de fechas no puede exceder un mes.',
   validation_end_date_in_future: 'La fecha de finalización no puede ser futura.',
-  validation_end_date_before_start: 'La fecha de finalización no puede ser anterior a la de inicio',
+  validation_end_date_before_start: 'La fecha de finalización no puede ser anterior a la de inicio.',
   shift_start_title: 'Iniciar Turno',
   shift_start_body: 'Antes de comenzar, ingrese el fondo de caja inicial.',
   shift_start_label: 'Fondo de Caja (€)',
@@ -287,10 +290,13 @@ function bindEvents() {
 
   // --- Payment ---
   $document.on('click', '#btn_cart_checkout', openPaymentModal);
-  $document.on('click', '#btn_confirm_payment', submitOrder);
+  $document.on('click', '#btn_confirm_payment', initiatePaymentConfirmation);
   $document.on('click', '[data-pay-method]', function() { addPaymentPart($(this).data('pay-method')); });
   $document.on('click', '.remove-part-btn', function() { $(this).closest('.payment-part').remove(); updatePaymentState(); });
   $document.on('input', '.payment-part-input', updatePaymentState);
+  // NEW: Event listener for quick cash buttons
+  $document.on('click', '.btn-quick-cash', function() { handleQuickCash($(this).data('value')); });
+
 
   // --- Ops Panel & Modals ---
   $document.on('click', '#btn_open_eod', openEodModal);

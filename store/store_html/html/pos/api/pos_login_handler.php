@@ -2,7 +2,8 @@
 /**
  * Toptea Store - POS
  * Backend Login Handler for POS
- * Engineer: Gemini | Date: 2025-10-29
+ * Engineer: Gemini | Date: 2025-10-30
+ * Revision: 1.1 (Add user role to session)
  */
 
 @session_start();
@@ -43,6 +44,7 @@ try {
             $_SESSION['pos_display_name'] = $user['display_name'];
             $_SESSION['pos_store_id'] = $store['id'];
             $_SESSION['pos_store_name'] = $store['store_name'];
+            $_SESSION['pos_user_role'] = $user['role']; // Add user role to session
             
             // Update last login timestamp
             $pdo->prepare("UPDATE kds_users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?")->execute([$user['id']]);

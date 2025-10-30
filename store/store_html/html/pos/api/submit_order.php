@@ -10,7 +10,7 @@ require_once realpath(__DIR__ . '/../../../pos_backend/core/shift_guard.php');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 // ★ 未开班直接拦截（409）
-ensure_active_shift_or_fail($pdo, 'any');
+ensure_active_shift_or_fail($pdo);
 
 function send_json_response($status, $message, $data = null, int $http = 200) {
   http_response_code($http);
@@ -18,7 +18,7 @@ function send_json_response($status, $message, $data = null, int $http = 200) {
   exit;
 }
 function diag($msg, $e = null) {
-  $base = 'DIAG_V5.8 :: File: submit_order.php';
+  $base = 'DIAG_V6.0 :: File: submit_order.php';
   if ($e instanceof Throwable) return $base . ' :: Line: ' . $e->getLine() . ' :: ' . $e->getMessage();
   return $base . ' :: ' . $msg;
 }
@@ -196,9 +196,8 @@ try {
     if (!empty($json_data[$k])) { $couponCode = trim((string)$json_data[$k]); break; }
   }
 
-  // ⬇️ 关键：解析支付（兼容 summary 数组）
   $payment_payload_raw = $json_data['payment'] ?? $json_data['payments'] ?? [];
-  [$pay_cash, $pay_card, $pay_platform, $sumPaid, $payment_summary] = extract_payment_totals($payment_payload_raw);
+  [, , , $sumPaid, $payment_summary] = extract_payment_totals($payment_payload_raw);
 
   // 门店配置
   $stmt_store = $pdo->prepare("SELECT * FROM kds_stores WHERE id = :store_id LIMIT 1");
@@ -238,26 +237,54 @@ try {
     }
   }
 
-  // 应收 = 促销后 - 积分
   $final_total = round($final_total_after_promo - $points_discount_final, 2);
   $discount_amount = round($discount_from_promo + $points_discount_final, 2);
 
-  // 支付核对（±0.01）
-  if (abs($sumPaid - $final_total) > 0.01) {
+  // --- 核心修复：调整支付核对逻辑 ---
+  // 检查实收金额是否小于应收总额（允许0.01欧元的误差）
+  if ($sumPaid < $final_total - 0.01) {
     $pdo->rollBack();
     send_json_response('error', 'Payment breakdown does not match final total.', [
       'final_total'=>$final_total,
       'sum_paid'=>$sumPaid,
-      'parsed'=>['cash'=>$pay_cash,'card'=>$pay_card,'platform'=>$pay_platform],
-      'keys_hint'=>array_slice(array_keys($payment_payload_raw ?? []), 0, 12)
     ], 422);
   }
+  
+  // 积分扣减与累计 (移至开票逻辑前，确保无论是否开票都执行)
+  if ($member_id && $points_to_deduct > 0 && $points_discount_final > 0) {
+    $pdo->prepare("UPDATE pos_members SET points_balance = points_balance - ? WHERE id = ?")
+        ->execute([$points_to_deduct, $member_id]);
+    $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, notes, user_id)
+                   VALUES (?,?,?,?,?,?)")
+        ->execute([$member_id, null, -$points_to_deduct, 'REDEEM_DISCOUNT', "兑换抵扣 {$points_discount_final} EUR", $user_id]);
+  }
+  if ($member_id && $final_total > 0) {
+    $points_to_add = (int)floor($final_total / $euros_per_point);
+    if ($points_to_add > 0) {
+      $pdo->prepare("UPDATE pos_members SET points_balance = points_balance + ? WHERE id = ?")
+          ->execute([$points_to_add, $member_id]);
+      $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, user_id)
+                     VALUES (?,?,?,?,?)")
+          ->execute([$member_id, null, $points_to_add, 'PURCHASE', $user_id]);
+    }
+  }
 
-  // 发票号
-  $compliance_system = $store_config['billing_system'] ?? null;
+  // --- 核心逻辑：检查是否需要开票 ---
+  if ($store_config['billing_system'] === 'NONE') {
+      // 不开票，直接提交事务并返回
+      $pdo->commit();
+      send_json_response('success', 'Order processed without invoice.', [
+          'invoice_id' => null,
+          'invoice_number' => 'NO_INVOICE',
+          'qr_content' => null
+      ]);
+      // 此处 exit，后续代码不执行
+  }
+
+  // --- 开票流程（仅在 billing_system 不是 'NONE' 时执行）---
+  $compliance_system = $store_config['billing_system'];
   [$series, $invoice_number] = allocate_invoice_number($pdo, $store_config, $compliance_system);
 
-  // 合规（可选）
   $compliance_data = null;
   $qr_payload = null;
   if ($compliance_system) {
@@ -271,10 +298,8 @@ try {
         $stmt_prev->execute([':system'=>$compliance_system, ':series'=>$series, ':nif'=>$issuer_nif]);
         $prev = $stmt_prev->fetch(PDO::FETCH_ASSOC);
         $previous_hash = $prev ? (json_decode($prev['compliance_data'] ?? '[]', true)['hash'] ?? null) : null;
-
         $issued_at_micro = (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('Y-m-d H:i:s.u');
         $invoiceData = ['series'=>$series,'number'=>$invoice_number,'issued_at'=>$issued_at_micro,'final_total'=>$final_total];
-
         $handler = new $class();
         $compliance_data = $handler->generateComplianceData($pdo, $invoiceData, $previous_hash);
         if (is_array($compliance_data)) $qr_payload = $compliance_data['qr_content'] ?? null;
@@ -282,84 +307,45 @@ try {
     }
   }
 
-  // 发票主表
   $issued_at = (new DateTime('now', new DateTimeZone('Europe/Madrid')))->format('Y-m-d H:i:s');
   $taxable_base = round($final_total / (1 + ($vat_rate / 100)), 2);
   $vat_amount   = round($final_total - $taxable_base, 2);
 
   $stmt_invoice = $pdo->prepare("
-    INSERT INTO pos_invoices (
-      invoice_uuid, store_id, user_id, shift_id,
-      issuer_nif, series, `number`, issued_at, invoice_type,
-      taxable_base, vat_amount, discount_amount, final_total,
-      status, compliance_system, compliance_data, payment_summary
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO pos_invoices (invoice_uuid, store_id, user_id, shift_id, issuer_nif, series, `number`, issued_at, invoice_type, taxable_base, vat_amount, discount_amount, final_total, status, compliance_system, compliance_data, payment_summary) 
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   ");
   $stmt_invoice->execute([
-    bin2hex(random_bytes(16)),
-    $store_id, $user_id, $shift_id,
-    (string)$store_config['tax_id'],
-    $series, $invoice_number, $issued_at, 'F2',
-    $taxable_base, $vat_amount, $discount_amount, $final_total,
+    bin2hex(random_bytes(16)), $store_id, $user_id, $shift_id, (string)$store_config['tax_id'],
+    $series, $invoice_number, $issued_at, 'F2', $taxable_base, $vat_amount, $discount_amount, $final_total,
     'ISSUED', $compliance_system, json_encode($compliance_data, JSON_UNESCAPED_UNICODE),
     json_encode($payment_summary, JSON_UNESCAPED_UNICODE)
   ]);
   $invoice_id = (int)$pdo->lastInsertId();
 
-  // 明细
-  $sql_item = "INSERT INTO pos_invoice_items
-      (invoice_id, item_name, variant_name, quantity, unit_price, unit_taxable_base, vat_rate, vat_amount, customizations)
-      VALUES (?,?,?,?,?,?,?,?,?)";
+  // 更新积分流水的 invoice_id
+  if ($member_id) {
+      $pdo->prepare("UPDATE pos_member_points_log SET invoice_id = ? WHERE user_id = ? AND invoice_id IS NULL ORDER BY id DESC LIMIT 2")
+          ->execute([$invoice_id, $user_id]);
+  }
+
+  $sql_item = "INSERT INTO pos_invoice_items (invoice_id, item_name, variant_name, quantity, unit_price, unit_taxable_base, vat_rate, vat_amount, customizations) VALUES (?,?,?,?,?,?,?,?,?)";
   $stmt_item = $pdo->prepare($sql_item);
 
   foreach ($cart as $item) {
     $qty = max(1, (int)($item['qty'] ?? 1));
     $unit_price = (float)($item['final_price'] ?? $item['unit_price_eur'] ?? 0);
     $item_total = round($unit_price * $qty, 2);
-
     $item_tax_base_total = round($item_total / (1 + ($vat_rate / 100)), 2);
     $item_vat_amount = round($item_total - $item_tax_base_total, 2);
-    $unit_tax_base = round($item_tax_base_total / $qty, 4);
-
-    $custom = [
-      'ice'    => $item['ice']    ?? null,
-      'sugar'  => $item['sugar']  ?? null,
-      'addons' => $item['addons'] ?? [],
-      'remark' => $item['remark'] ?? ''
-    ];
-
+    $unit_tax_base = ($qty > 0) ? round($item_tax_base_total / $qty, 4) : 0;
+    $custom = ['ice' => $item['ice'] ?? null, 'sugar' => $item['sugar'] ?? null, 'addons' => $item['addons'] ?? [], 'remark' => $item['remark'] ?? ''];
     $stmt_item->execute([
-      $invoice_id,
-      (string)($item['title'] ?? ($item['name'] ?? '')),
-      (string)($item['variant_name'] ?? ''),
-      $qty,
-      $unit_price,
-      $unit_tax_base,
-      $vat_rate,
-      $item_vat_amount,
-      json_encode($custom, JSON_UNESCAPED_UNICODE)
+      $invoice_id, (string)($item['title'] ?? ($item['name'] ?? '')), (string)($item['variant_name'] ?? ''),
+      $qty, $unit_price, $unit_tax_base, $vat_rate, $item_vat_amount, json_encode($custom, JSON_UNESCAPED_UNICODE)
     ]);
   }
-
-  // 积分扣减与累计
-  if ($member_id && $points_to_deduct > 0 && $points_discount_final > 0) {
-    $pdo->prepare("UPDATE pos_members SET points_balance = points_balance - ? WHERE id = ?")
-        ->execute([$points_to_deduct, $member_id]);
-    $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, notes, user_id)
-                   VALUES (?,?,?,?,?,?)")
-        ->execute([$member_id, $invoice_id, -$points_to_deduct, 'REDEEM_DISCOUNT', "兑换抵扣 {$points_discount_final} EUR", $user_id]);
-  }
-  if ($member_id && $final_total > 0) {
-    $points_to_add = (int)floor($final_total / $euros_per_point);
-    if ($points_to_add > 0) {
-      $pdo->prepare("UPDATE pos_members SET points_balance = points_balance + ? WHERE id = ?")
-          ->execute([$points_to_add, $member_id]);
-      $pdo->prepare("INSERT INTO pos_member_points_log (member_id, invoice_id, points_change, reason_code, user_id)
-                     VALUES (?,?,?,?,?)")
-          ->execute([$member_id, $invoice_id, $points_to_add, 'PURCHASE', $user_id]);
-    }
-  }
-
+  
   $pdo->commit();
 
   send_json_response('success','Order created.',[
