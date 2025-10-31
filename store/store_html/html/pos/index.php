@@ -2,7 +2,7 @@
 /**
  * TopTea POS - Main Entry Point
  * Engineer: Gemini | Date: 2025-10-30
- * Revision: 3.4 (Quick Cash & UI Polish)
+ * Revision: 3.5 (Enhance Top Bar User Info Display)
  */
 
 // This MUST be the first include. It checks if the user is logged in.
@@ -32,11 +32,11 @@ $cache_version = time();
       <div class="d-flex align-items-center ms-auto gap-3">
         <span id="pos_clock" class="navbar-text fw-bold">--:--:--</span>
         <span class="navbar-text text-muted">|</span>
-        <span id="pos_store_name" class="navbar-text"><?php echo htmlspecialchars($_SESSION['pos_store_name'] ?? 'Store'); ?></span>
+        <span id="pos_store_name" class="navbar-text fw-bold"><?php echo htmlspecialchars($_SESSION['pos_store_name'] ?? 'Store'); ?></span>
         <span class="navbar-text text-muted">|</span>
         <div class="dropdown">
             <a href="#" class="navbar-text dropdown-toggle text-decoration-none" data-bs-toggle="dropdown">
-                <i class="bi bi-person"></i> <?php echo htmlspecialchars($_SESSION['pos_display_name'] ?? 'User'); ?>
+                <i class="bi bi-person"></i> <?php echo htmlspecialchars($_SESSION['pos_display_name'] ?? 'User'); ?> <span class="badge bg-secondary fw-normal"><?php echo htmlspecialchars($_SESSION['pos_user_role'] ?? 'staff'); ?></span>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>退出登录</a></li>
@@ -97,7 +97,7 @@ $cache_version = time();
   
   <div class="mb-3"><small class="text-muted">快捷现金</small><div class="d-flex flex-wrap gap-2 mt-1"><button class="btn btn-outline-secondary btn-quick-cash" data-value="5">€5</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="10">€10</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="20">€20</button><button class="btn btn-outline-secondary btn-quick-cash" data-value="50">€50</button></div></div>
 
-  <div class="mb-2"><small class="text-muted" data-i18n="add_payment_method">添加其它方式</small></div><div id="payment_method_selector" class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" data-pay-method="Cash"><i class="bi bi-cash-coin me-1"></i><span data-i18n="cash_payment">现金</span></button><button class="btn btn-outline-primary" data-pay-method="Card"><i class="bi bi-credit-card me-1"></i><span data-i18n="card_payment">刷卡</span></button><button class="btn btn-outline-primary" data-pay-method="Bizum" disabled><i class="bi bi-phone me-1"></i>Bizum</button><button class="btn btn-outline-primary" data-pay-method="Platform"><i class="bi bi-qr-code me-1"></i><span data-i18n="platform_code">平台码</span></button></div></div><div class="modal-footer d-grid"><button type="button" id="btn_confirm_payment" class="btn btn-primary w-100">确认收款</button></div></div></div></div>
+  <div class="mb-2"><small class="text-muted" data-i18n="payment_methods_label">支付方式</small></div><div id="payment_method_selector" class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-payment-method" data-pay-method="Cash"><i class="bi bi-cash-coin me-1"></i><span data-i18n="cash_payment">现金</span></button><button class="btn btn-outline-primary btn-payment-method" data-pay-method="Card"><i class="bi bi-credit-card me-1"></i><span data-i18n="card_payment">刷卡</span></button><button class="btn btn-outline-primary btn-payment-method" data-pay-method="Bizum" disabled><i class="bi bi-phone me-1"></i>Bizum</button><button class="btn btn-outline-primary btn-payment-method" data-pay-method="Platform"><i class="bi bi-qr-code me-1"></i><span data-i18n="platform_code">平台码</span></button></div></div><div class="modal-footer d-grid"><button type="button" id="btn_confirm_payment" class="btn btn-primary w-100">确认收款</button></div></div></div></div>
   <div id="payment_templates" class="d-none"><div class="payment-part card card-body mb-2" data-method="Cash"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-cash-coin me-2"></i><span data-i18n="cash_payment">现金</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="payment-part card card-body mb-2" data-method="Card"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-credit-card me-2"></i><span data-i18n="card_payment">刷卡</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="payment-part card card-body mb-2" data-method="Platform"><div class="d-flex align-items-center mb-2"><span class="fw-bold"><i class="bi bi-qr-code me-2"></i><span data-i18n="platform_code">平台码</span></span><button class="btn-close ms-auto remove-part-btn"></button></div><div class="row g-2"><div class="col-7"><label class="form-label small" data-i18n="platform_amount">收款金额</label><input type="number" class="form-control form-control-lg text-center payment-part-input" placeholder="0.00"></div><div class="col-5"><label class="form-label small" data-i18n="platform_ref">参考码</label><input type="text" class="form-control form-control-lg text-center payment-part-ref" placeholder="输入码"></div></div></div></div>
 
   <div class="offcanvas offcanvas-end offcanvas-sheet" tabindex="-1" id="holdOrdersOffcanvas">
@@ -330,8 +330,8 @@ $cache_version = time();
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">返回修改</button>
-        <button class="btn btn-primary" id="pc-confirm">确认入账并打印</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">返回修改</button>
+        <button type="button" class="btn btn-primary" id="pc-confirm">确认入账并打印</button>
       </div>
 
     </div>

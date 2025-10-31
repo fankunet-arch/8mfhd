@@ -332,6 +332,10 @@ try {
   $sql_item = "INSERT INTO pos_invoice_items (invoice_id, item_name, variant_name, quantity, unit_price, unit_taxable_base, vat_rate, vat_amount, customizations) VALUES (?,?,?,?,?,?,?,?,?)";
   $stmt_item = $pdo->prepare($sql_item);
 
+  // (Plan II-4) 准备杯贴打印数据包
+  $print_jobs = [];
+  $full_invoice_number = $series . '-' . $invoice_number; // (Plan II-4) {cup_order_number}
+
   foreach ($cart as $item) {
     $qty = max(1, (int)($item['qty'] ?? 1));
     $unit_price = (float)($item['final_price'] ?? $item['unit_price_eur'] ?? 0);
@@ -344,14 +348,36 @@ try {
       $invoice_id, (string)($item['title'] ?? ($item['name'] ?? '')), (string)($item['variant_name'] ?? ''),
       $qty, $unit_price, $unit_tax_base, $vat_rate, $item_vat_amount, json_encode($custom, JSON_UNESCAPED_UNICODE)
     ]);
+
+    // (Plan II-4) 格式化定制详情
+    $customizations_parts = [];
+    if (!empty($custom['ice'])) $customizations_parts[] = 'Ice:' . $custom['ice'] . '%';
+    if (!empty($custom['sugar'])) $customizations_parts[] = 'Sugar:' . $custom['sugar'] . '%';
+    if (!empty($custom['addons'])) $customizations_parts[] = '+' . implode(',+', $custom['addons']);
+    
+    // (Plan II-4) 为此购物车的每一“杯”创建打印作业
+    for ($i = 0; $i < $qty; $i++) {
+        $print_jobs[] = [
+            'type' => 'CUP_STICKER',
+            'data' => [
+                'cup_order_number' => $full_invoice_number,
+                'item_name' => (string)($item['title'] ?? ($item['name'] ?? '')),
+                'variant_name' => (string)($item['variant_name'] ?? ''),
+                'customization_detail' => implode(' / ', $customizations_parts),
+                'remark' => (string)($custom['remark'] ?? ''),
+                'store_name' => $store_config['store_name'] ?? ''
+            ]
+        ];
+    }
   }
   
   $pdo->commit();
 
   send_json_response('success','Order created.',[
     'invoice_id'=>$invoice_id,
-    'invoice_number'=>$series.'-'.$invoice_number,
-    'qr_content'=>$qr_payload
+    'invoice_number'=>$full_invoice_number,
+    'qr_content'=>$qr_payload,
+    'print_jobs' => $print_jobs // (Plan II-4) 返回杯贴打印作业
   ]);
 
 } catch (Throwable $e) {

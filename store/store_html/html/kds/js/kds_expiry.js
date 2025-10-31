@@ -1,7 +1,7 @@
 /**
  * Toptea KDS - kds_expiry.js
  * JavaScript for Expiry Tracking Page
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 9.6 (Definitive WebView Compatibility Fix)
+ * Engineer: Gemini | Date: 2025-10-31 | Revision: 9.8 (FIX: Replace alert())
  */
 
 let confirmationModal = null;
@@ -58,7 +58,8 @@ async function performExpiryAction(buttonElement) {
         }
     } catch (error) {
         console.error('Failed to update status:', error);
-        alert(`${translations.action_failed}: ${error.message}`);
+        // **【关键修复 v1.6】** (使用自定义 Alert)
+        showKdsAlert(`${translations.action_failed}: ${error.message}`, true);
     } finally {
         buttonElement.disabled = false;
         buttonElement.innerHTML = originalText;
@@ -102,7 +103,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         tr.className = `status-${timeLeft.class}`;
 
-        // --- START: DEFINITIVE FIX - Use a simple, globally accessible function call in onclick ---
         tr.innerHTML = `
             <td><strong>${materialName}</strong></td>
             <td>${formatTime(item.opened_at)}</td>
@@ -120,19 +120,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     ${translations.btn_discard}
                 </button>
             </td>`;
-        // --- END: DEFINITIVE FIX ---
         
         return tr;
     }
     
-    function formatTime(isoString) { /* ... Jasad yang tidak berubah ... */ }
-    function calculateTimeLeft(expiresAt) { /* ... Jasad yang tidak berubah ... */ }
-    async function fetchAndRenderItems() { /* ... Jasad yang tidak berubah ... */ }
-
-    fetchAndRenderItems();
-    setInterval(fetchAndRenderItems, 60000);
-
     function formatTime(isoString) { const date = new Date(isoString); return date.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'); }
     function calculateTimeLeft(expiresAt) { const now = new Date(); const expiry = new Date(expiresAt); let diff = expiry - now; if (diff <= 0) { return { text: `<span class="text-danger fw-bold">${translations.status_expired}</span>`, class: 'danger' }; } const hoursLeft = diff / (1000 * 60 * 60); let statusClass = 'normal'; if (hoursLeft <= 2) statusClass = 'warning'; if (hoursLeft <= 0) statusClass = 'danger'; const d = Math.floor(diff / (1000 * 60 * 60 * 24)); diff -= d * (1000 * 60 * 60 * 24); const h = Math.floor(diff / (1000 * 60 * 60)); diff -= h * (1000 * 60 * 60); const m = Math.floor(diff / (1000 * 60)); const text = translations.time_left_format.replace('{d}', d).replace('{h}', h).replace('{m}', m); return { text, class: statusClass }; }
     async function fetchAndRenderItems() { try { const response = await fetch(API_GET_URL); if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); const result = await response.json(); if (result.status === 'success' && result.data) { listBody.innerHTML = ''; if (result.data.length > 0) { result.data.forEach(item => listBody.appendChild(createRow(item))); } else { listBody.innerHTML = `<tr><td colspan="5" class="text-center">${translations.no_items}</td></tr>`; } } else { throw new Error(result.message || 'Invalid data from API'); } } catch (error) { console.error('Failed to fetch expiry items:', error); listBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger fw-bold">${translations.loading_failed}</td></tr>`; } }
+
+    fetchAndRenderItems();
+    setInterval(fetchAndRenderItems, 60000);
 });

@@ -1,11 +1,12 @@
 <?php
 /**
  * TopTea POS - Print Handler API
- * Version: 2.2.0
- * Engineer: Gemini | Date: 2025-10-29
+ * Version: 2.4.0 (KDS/POS Session Compatible)
+ * Engineer: Gemini | Date: 2025-10-30
  * Implements 7.A.3 - Step 2.1: Template Synchronization Service for POS
  */
 
+// 仅加载数据库配置，不检查登录
 require_once realpath(__DIR__ . '/../../../pos_backend/core/config.php');
 
 header('Content-Type: application/json; charset=utf-8');
@@ -15,9 +16,28 @@ function send_json_response($status, $message, $data = null) {
     exit;
 }
 
-// SIMULATION: In a real system, these would come from the logged-in user's session
-$store_id = 1; 
-$user_id = 1;
+// **【关键修复】**
+// 重新启动会话以检测 KDS 或 POS 的登录状态
+@session_start();
+
+$store_id = 0;
+if (isset($_GET['kds_store_id']) && (int)$_GET['kds_store_id'] > 0) {
+    // 优先使用 KDS 明确请求的 store_id
+    $store_id = (int)$_GET['kds_store_id'];
+} elseif (isset($_SESSION['pos_store_id'])) {
+    // 其次使用 POS 自己的会话
+    $store_id = (int)$_SESSION['pos_store_id'];
+} elseif (isset($_SESSION['kds_store_id'])) {
+    // 再次使用 KDS 的会话
+    $store_id = (int)$_SESSION['kds_store_id'];
+}
+
+if ($store_id === 0) {
+     http_response_code(401);
+     send_json_response('error', '无法确定门店ID。 (store_id unknown)');
+}
+// **【修复结束】**
+
 
 $action = $_GET['action'] ?? null;
 
@@ -26,7 +46,7 @@ try {
         // action=get_templates: 获取所有当前门店可用的打印模板
         case 'get_templates':
             $stmt = $pdo->prepare(
-                "SELECT template_type, template_content 
+                "SELECT template_type, template_content, physical_size
                  FROM pos_print_templates 
                  WHERE (store_id = :store_id OR store_id IS NULL) AND is_active = 1
                  ORDER BY store_id DESC" // 店铺专用模板优先
@@ -38,7 +58,13 @@ try {
             $templates = [];
             foreach ($results as $row) {
                 if (!isset($templates[$row['template_type']])) {
-                    $templates[$row['template_type']] = json_decode($row['template_content'], true);
+                    // **【关键修复】**
+                    // 返回一个包含 content 和 size 的对象
+                    // 而不是直接返回 content
+                    $templates[$row['template_type']] = [
+                        'content' => json_decode($row['template_content'], true),
+                        'size' => $row['physical_size']
+                    ];
                 }
             }
 

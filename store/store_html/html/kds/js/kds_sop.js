@@ -1,7 +1,7 @@
 /**
  * Toptea Store - KDS
  * SOP (Standard Operating Procedure) Page Logic
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 7.7 (Expiry Link Integration)
+ * Engineer: Gemini | Date: 2025-10-31 | Revision: 7.8 (FIX: Replace alert())
  */
 $(function() {
 
@@ -22,6 +22,8 @@ $(function() {
             cards_waiting: '等待查询...',
             placeholder_sku: '输入饮品编码...',
             btn_logout: '退出',
+            // 【新增】
+            sop_query_failed: '查询失败'
         },
         'es-ES': {
             btn_mode_quantity: 'Dosis',
@@ -39,6 +41,8 @@ $(function() {
             cards_waiting: 'Esperando búsqueda...',
             placeholder_sku: 'Introduzca el código...',
             btn_logout: 'Salir',
+            // 【新增】
+            sop_query_failed: 'Error de Búsqueda'
         }
     };
 
@@ -54,7 +58,39 @@ $(function() {
 
     function renderProductInfo() { /* ... unchanged ... */ }
     function renderStepCards() { /* ... unchanged ... */ }
-    function fetchSopData(sku) { /* ... unchanged ... */ }
+    
+    // **【关键修复 v1.6】**
+    function fetchSopData(sku) {
+        $searchForm.find('button').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+        $.ajax({
+            url: 'api/sop_handler.php',
+            type: 'GET',
+            data: { sku: sku },
+            dataType: 'json',
+            success: function(response) {
+                if (response.status === 'success') {
+                    currentRecipeData = response.data;
+                    currentStepKey = "base";
+                    $('.kds-step-tab').removeClass('active').first().addClass('active');
+                    renderAll();
+                }
+            },
+            error: function(jqXHR) {
+                currentRecipeData = null;
+                renderAll();
+                const errorMsg = jqXHR.responseJSON?.message || '查询失败，请检查网络或SKU是否正确。';
+                // (使用自定义 Alert)
+                const translations = I18N[currentLang] || I18N['zh-CN'];
+                showKdsAlert(`${translations.sop_query_failed}: ${errorMsg}`, true);
+            },
+            complete: function() {
+                $searchForm.find('button').prop('disabled', false).html('<i class="bi bi-search"></i>');
+                $skuInput.focus().select();
+            }
+        });
+    }
+    // **【修复结束】**
+
     function renderAll() { renderProductInfo(); renderStepCards(); }
     $searchForm.on('submit', function(e) { e.preventDefault(); const sku = $skuInput.val(); if (sku) { fetchSopData(sku); } });
     $('.kds-step-tab').on('click', function() { currentStepKey = $(this).data('step'); $('.kds-step-tab').removeClass('active'); $(this).addClass('active'); renderStepCards(); });
@@ -88,5 +124,4 @@ $(function() {
     // --- Unchanged function bodies ---
     function renderProductInfo() { if (!currentRecipeData) { $productInfoArea.html(`<div class="kds-cup-number mb-2 text-muted">---</div><h3 class="fw-bold mb-3 text-muted" data-i18n-key="info_enter_sku">${I18N[currentLang].info_enter_sku}</h3><div class="kds-info-display text-muted">--</div><ul class="kds-order-tags"></ul>`); $('.btn-touch-action').prop('disabled', true); return; } const product = currentRecipeData.product; const langKey = currentLang.substring(0, 2); const productName = product[`name_${langKey}`] || product.name_zh; const statusName = product[`status_name_${langKey}`] || product.status_name_zh; $productInfoArea.html(`<div class="kds-cup-number mb-2">${product.product_sku}</div><h3 class="fw-bold mb-3">${productName}</h3><div class="kds-info-display">${product.cup_name}</div><ul class="kds-order-tags"><li class="kds-tag">${statusName}</li></ul>`); $('.btn-touch-action').prop('disabled', false); }
     function renderStepCards() { if (!currentRecipeData) { $stepTip.text(I18N[currentLang].tip_waiting); $cardsContainer.html(`<div class="col-12 text-center text-muted pt-5"><h4 data-i18n-key="cards_waiting">${I18N[currentLang].cards_waiting}</h4></div>`); return; } const stepData = currentRecipeData.recipe[currentStepKey]; $stepTip.text(stepData.tip[currentLang] || stepData.tip['zh-CN']); $cardsContainer.empty(); if (!stepData.items.length) { $cardsContainer.html('<div class="col-12 text-muted">此步骤无配料</div>'); return; } stepData.items.forEach(item => { const title = item.title[currentLang] || item.title['zh-CN']; const unit = item.unit[currentLang] || item.unit['zh-CN']; $cardsContainer.append(`<div class="col-12 col-md-6 col-xl-4"><div class="kds-ingredient-card"><span class="badge bg-success position-absolute top-0 start-0 m-3">${item.order}</span><div class="bg-secondary rounded mx-auto mb-2" style="width:80px;height:80px; background-image: url(images/placeholder.png); background-size: cover;"></div><h5 class="fw-bold mb-0">${title}</h5><div class="kds-quantity">${item.qty}</div><div class="kds-unit-measure">${unit}</div></div></div>`); }); }
-    function fetchSopData(sku) { $searchForm.find('button').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'); $.ajax({ url: 'api/sop_handler.php', type: 'GET', data: { sku: sku }, dataType: 'json', success: function(response) { if (response.status === 'success') { currentRecipeData = response.data; currentStepKey = "base"; $('.kds-step-tab').removeClass('active').first().addClass('active'); renderAll(); } }, error: function(jqXHR) { currentRecipeData = null; renderAll(); const errorMsg = jqXHR.responseJSON?.message || '查询失败，请检查网络或SKU是否正确。'; alert(errorMsg); }, complete: function() { $searchForm.find('button').prop('disabled', false).html('<i class="bi bi-search"></i>'); $skuInput.focus().select(); } }); }
 });

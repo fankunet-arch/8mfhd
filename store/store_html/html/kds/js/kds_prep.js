@@ -1,7 +1,8 @@
 /**
  * Toptea KDS - kds_prep.js
  * JavaScript for Material Preparation Page
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 9.6 (Definitive WebView Compatibility Fix)
+ * Engineer: Gemini | Date: 2025-10-31
+ * Revision: 9.8 (FIX: Replace all alert() with showKdsAlert())
  */
 
 let confirmationModal = null;
@@ -46,14 +47,37 @@ async function performPrepAction(buttonElement) {
     try {
         const response = await fetch(API_URL_RECORD, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ material_id: materialId }) });
         const result = await response.json();
+        
         if (response.ok && result.status === 'success') {
-            alert(translations.action_success);
+            
+            // 提示成功 (使用自定义 Alert)
+            showKdsAlert(translations.action_success, false); 
+            
+            // 检查后端是否返回了打印数据
+            if (result.data && result.data.print_data) {
+                // 调用打印桥接
+                if (window.KDS_PRINT_BRIDGE && typeof window.KDS_PRINT_BRIDGE.executePrint === 'function') {
+                    const template = KDS_STATE.templates['EXPIRY_LABEL'];
+                    if (template) {
+                        window.KDS_PRINT_BRIDGE.executePrint(template, result.data.print_data);
+                    } else {
+                        console.error("未在 KDS_STATE.templates 中找到 'EXPIRY_LABEL' 模板!");
+                        showKdsAlert("操作成功，但打印失败：未配置效期标签模板。", true);
+                    }
+                } else {
+                    showKdsAlert('打印桥接 KDS_PRINT_BRIDGE 未找到。', true);
+                }
+            } else {
+                 console.warn("API 成功了，但没有返回 print_data，跳过打印。");
+            }
+
         } else {
             throw new Error(result.message || 'Unknown error');
         }
     } catch (error) {
         console.error('Failed to record expiry:', error);
-        alert(`${translations.action_failed}: ${error.message}`);
+        // (使用自定义 Alert)
+        showKdsAlert(`${translations.action_failed}: ${error.message}`, true);
     } finally {
         buttonElement.disabled = false;
         buttonElement.innerHTML = originalText;
@@ -107,7 +131,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const buttonIcon = (type === 'packaged') ? 'bi-box-arrow-up' : 'bi-check-circle';
         const buttonText = (type === 'packaged') ? translations.btn_open : translations.btn_prep;
 
-        // --- START: DEFINITIVE FIX - Use a simple, globally accessible function call in onclick ---
         const buttonHTML = `
             <button 
                 class="btn-action ${buttonClass}" 
@@ -117,14 +140,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 <i class="bi ${buttonIcon}"></i> ${buttonText}
             </button>
         `;
-        // --- END: DEFINITIVE FIX ---
         
         itemDiv.innerHTML = `<span class="material-name">${materialName}</span> ${buttonHTML}`;
         return itemDiv;
     }
 
-    function filterMaterials() { /* ... Jasad yang tidak berubah ... */ }
-    async function fetchAndRenderMaterials() { /* ... Jasad yang tidak berubah ... */ }
+    function filterMaterials() { const searchTerm = searchInput.value.toLowerCase(); const activeList = document.querySelector('.tab-pane.active .material-list'); if (!activeList) return; const items = activeList.querySelectorAll('.material-item'); let visibleCount = 0; items.forEach(item => { const nameElement = item.querySelector('.material-name'); const name = nameElement ? nameElement.textContent.toLowerCase() : ''; if (name.includes(searchTerm)) { item.style.display = ''; visibleCount++; } else { item.style.display = 'none'; } }); let noResultsMsg = activeList.querySelector('.no-results-message'); if (visibleCount === 0 && items.length > 0) { if (!noResultsMsg) { noResultsMsg = document.createElement('p'); noResultsMsg.className = 'text-muted no-results-message'; activeList.appendChild(noResultsMsg); } noResultsMsg.textContent = translations.no_results || 'No results found'; noResultsMsg.style.display = ''; } else if (noResultsMsg) { noResultsMsg.style.display = 'none'; } }
+    async function fetchAndRenderMaterials() { try { const response = await fetch(API_URL_GET); if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); const result = await response.json(); if (result.status === 'success' && result.data) { packagedGoodsList.innerHTML = ''; inStorePrepsList.innerHTML = ''; if (result.data.packaged_goods.length > 0) { result.data.packaged_goods.forEach(material => { packagedGoodsList.appendChild(createMaterialItem(material, 'packaged')); }); } else { packagedGoodsList.innerHTML = `<p class="text-muted">${translations.no_packaged}</p>`; } if (result.data.in_store_preps.length > 0) { result.data.in_store_preps.forEach(material => { inStorePrepsList.appendChild(createMaterialItem(material, 'in_store')); }); } else { inStorePrepsList.innerHTML = `<p class="text-muted">${translations.no_preps}</p>`; } filterMaterials(); } else { throw new Error(result.message || 'Invalid data from API'); } } catch (error) { console.error('Failed to fetch materials:', error); const errorHtml = `<p class="text-danger fw-bold">${translations.loading_failed}</p>`; packagedGoodsList.innerHTML = errorHtml; inStorePrepsList.innerHTML = errorHtml; } }
     
     if (searchInput) { searchInput.addEventListener('input', filterMaterials); }
     const triggerTabList = [].slice.call(document.querySelectorAll('#v-pills-tab button'));
@@ -135,7 +157,4 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     fetchAndRenderMaterials();
-
-    function filterMaterials() { const searchTerm = searchInput.value.toLowerCase(); const activeList = document.querySelector('.tab-pane.active .material-list'); if (!activeList) return; const items = activeList.querySelectorAll('.material-item'); let visibleCount = 0; items.forEach(item => { const nameElement = item.querySelector('.material-name'); const name = nameElement ? nameElement.textContent.toLowerCase() : ''; if (name.includes(searchTerm)) { item.style.display = ''; visibleCount++; } else { item.style.display = 'none'; } }); let noResultsMsg = activeList.querySelector('.no-results-message'); if (visibleCount === 0 && items.length > 0) { if (!noResultsMsg) { noResultsMsg = document.createElement('p'); noResultsMsg.className = 'text-muted no-results-message'; activeList.appendChild(noResultsMsg); } noResultsMsg.textContent = translations.no_results || 'No results found'; noResultsMsg.style.display = ''; } else if (noResultsMsg) { noResultsMsg.style.display = 'none'; } }
-    async function fetchAndRenderMaterials() { try { const response = await fetch(API_URL_GET); if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); const result = await response.json(); if (result.status === 'success' && result.data) { packagedGoodsList.innerHTML = ''; inStorePrepsList.innerHTML = ''; if (result.data.packaged_goods.length > 0) { result.data.packaged_goods.forEach(material => { packagedGoodsList.appendChild(createMaterialItem(material, 'packaged')); }); } else { packagedGoodsList.innerHTML = `<p class="text-muted">${translations.no_packaged}</p>`; } if (result.data.in_store_preps.length > 0) { result.data.in_store_preps.forEach(material => { inStorePrepsList.appendChild(createMaterialItem(material, 'in_store')); }); } else { inStorePrepsList.innerHTML = `<p class="text-muted">${translations.no_preps}</p>`; } filterMaterials(); } else { throw new Error(result.message || 'Invalid data from API'); } } catch (error) { console.error('Failed to fetch materials:', error); const errorHtml = `<p class="text-danger fw-bold">${translations.loading_failed}</p>`; packagedGoodsList.innerHTML = errorHtml; inStorePrepsList.innerHTML = errorHtml; } }
 });
