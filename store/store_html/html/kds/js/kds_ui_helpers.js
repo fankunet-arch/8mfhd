@@ -2,13 +2,16 @@
  * Toptea KDS - UI Helpers
  * 包含自定义对话框 (alert) 逻辑，以兼容套壳环境。
  * Engineer: Gemini | Date: 2025-10-31
+ * Revision: 1.1 (DOM Ready Fix)
  */
 
 var kdsSimpleAlertModalInstance = null;
-var kdsSimpleAlertModalEl = document.getElementById('kdsSimpleAlertModal');
 
-// 延迟初始化，确保 Bootstrap 已加载
+// 延迟初始化，确保 Bootstrap 和 DOM 元素已加载
 document.addEventListener('DOMContentLoaded', function() {
+    // 【关键修复】将 getElementById 移入事件监听器内部
+    var kdsSimpleAlertModalEl = document.getElementById('kdsSimpleAlertModal');
+    
     if (kdsSimpleAlertModalEl) {
         kdsSimpleAlertModalInstance = new bootstrap.Modal(kdsSimpleAlertModalEl);
     } else {

@@ -18,6 +18,13 @@
   --tap:48px;
 }
 
+/* --- FIX: Add padding for Tablet Status Bar --- */
+.navbar.fixed-top {
+  padding-top: env(safe-area-inset-top);
+}
+/* --- End Fix --- */
+
+
 html,body{height:100%;}
 body{
   background: linear-gradient(180deg, var(--bg-0) 0%, #E8EEF4 100%);
@@ -26,7 +33,11 @@ body{
 }
 
 .bg-surface{ background-color: var(--surface-1)!important; border-bottom:1px solid var(--border); }
-.pos-container{ padding-top:4.25rem; padding-bottom:5.5rem; }
+.pos-container{ 
+  /* --- FIX: Adjust top padding to account for safe area --- */
+  padding-top: calc(4.25rem + env(safe-area-inset-top)); 
+  padding-bottom:5.5rem; 
+}
 .text-brand{ color:var(--brand)!important; }
 .bg-brand-soft{ background: rgba(237,119,98,.16)!important; }
 .brand-dot{ width:10px; height:10px; border-radius:50%; background:var(--brand); display:inline-block; }
@@ -54,6 +65,8 @@ body{
   padding:.6rem 0;
   z-index:1030;
   border-top:1px solid var(--border);
+  /* --- FIX: Add padding for Tablet Bottom Bar/Home Indicator --- */
+  padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
 }
 body.righty-mode #bottom_bar{ flex-direction: row-reverse; }
 body.righty-mode #bottom_bar > .text-end{ order:2; margin-inline:0 1rem; }
@@ -195,8 +208,8 @@ body.contrast-boost{
 }
 
 .eod-block-content {
-    background-color: var(--surface-1);
-    color: var(--ink);
+    background-color: var(--surface-1, #fff);
+    color: var(--ink, #111);
     border-radius: 0.8rem;
     box-shadow: 0 8px 30px rgba(0,0,0,0.2);
     width: 100%;
@@ -232,8 +245,8 @@ body.contrast-boost{
 
 .eod-block-footer {
     padding: 0.8rem 1rem;
-    background-color: var(--surface-2);
-    border-top: 1px solid var(--border);
+    background-color: var(--surface-2, #f1f1f1);
+    border-top: 1px solid var(--border, #ccc);
     display: flex;
     justify-content: space-between; /* 两端对齐 */
     gap: 0.5rem;
