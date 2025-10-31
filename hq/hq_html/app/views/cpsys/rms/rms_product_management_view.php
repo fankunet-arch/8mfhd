@@ -107,7 +107,7 @@
                             </button>
                         </div>
                         <div class="card-body" id="adjustments-body">
-                            <p class="text-muted text-center">暂无调整规则。</p>
+                            <p class="text-muted text-center" id="no-adjustments-placeholder">暂无调整规则。</p>
                         </div>
                     </div>
                 </div>
@@ -138,4 +138,48 @@
         </tr>
     </table>
 
+    <div id="adjustment-rule-template" class="card mb-3 adjustment-rule-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 text-info">当满足以下条件时:</h6>
+                <button type="button" class="btn-close btn-remove-adjustment-rule" aria-label="删除此规则"></button>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">杯型</label>
+                    <select class="form-select form-select-sm cup-condition">
+                        <option value="">-- 任意 --</option>
+                         <?php foreach($cup_options as $c): ?>
+                            <option value="<?php echo $c['id']; ?>"><?php echo htmlspecialchars($c['cup_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">甜度</label>
+                    <select class="form-select form-select-sm sweetness-condition">
+                        <option value="">-- 任意 --</option>
+                         <?php foreach($sweetness_options as $s): ?>
+                            <option value="<?php echo $s['id']; ?>"><?php echo htmlspecialchars($s['name_zh']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">冰量</label>
+                    <select class="form-select form-select-sm ice-condition">
+                        <option value="">-- 任意 --</option>
+                         <?php foreach($ice_options as $i): ?>
+                            <option value="<?php echo $i['id']; ?>"><?php echo htmlspecialchars($i['name_zh']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <h6 class="text-info">则覆盖以下原料用量:</h6>
+            <table class="table table-sm table-borderless">
+                <tbody class="adjustment-recipe-body"></tbody>
+            </table>
+            <button type="button" class="btn btn-outline-secondary btn-sm btn-add-adjustment-recipe-row">
+                <i class="bi bi-plus-circle-dotted"></i> 添加原料覆盖
+            </button>
+        </div>
+    </div>
 </div>
