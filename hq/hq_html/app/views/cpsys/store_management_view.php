@@ -32,6 +32,8 @@
                                         <span class="badge text-bg-primary">TicketBAI</span>
                                     <?php elseif ($store['billing_system'] === 'VERIFACTU'): ?>
                                         <span class="badge" style="background-color: #6f42c1; color: white;">Veri*Factu</span>
+                                    <?php elseif ($store['billing_system'] === 'NONE'): ?>
+                                        <span class="badge text-bg-warning">不可开票</span>
                                     <?php else: ?>
                                         <span class="badge text-bg-secondary">未配置</span>
                                     <?php endif; ?>
@@ -84,6 +86,7 @@
                     <option value="" selected disabled>-- 请为门店指定法规 --</option>
                     <option value="TICKETBAI">TicketBAI (巴斯克地区)</option>
                     <option value="VERIFACTU">Veri*Factu (西班牙国家标准)</option>
+                    <option value="NONE">不可开票</option>
                 </select>
             </div>
             <div class="row">

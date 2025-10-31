@@ -1,9 +1,9 @@
 <?php
 /**
  * TopTea HQ - Print Template Management API
- * Version: 2.1.0
- * Engineer: Gemini | Date: 2025-10-29
- * Implements A.2 / 7.A.3 - Step 1.2: Template Management Backend Service
+ * Version: 3.0.0
+ * Engineer: Gemini | Date: 2025-10-30
+ * Update: Added physical_size field to save logic.
  */
 
 require_once realpath(__DIR__ . '/../../../core/config.php');
@@ -39,6 +39,7 @@ try {
                 http_response_code(400);
                 send_json_response('error', '无效的模板ID。');
             }
+            // SELECT * automatically includes the new physical_size column
             $stmt = $pdo->prepare("SELECT * FROM pos_print_templates WHERE id = ?");
             $stmt->execute([$id]);
             $template = $stmt->fetch();
@@ -65,6 +66,7 @@ try {
             $params = [
                 ':template_name' => trim($data['template_name'] ?? ''),
                 ':template_type' => trim($data['template_type'] ?? ''),
+                ':physical_size' => trim($data['physical_size'] ?? ''), // Get new field
                 ':template_content' => $content_json,
                 ':is_active' => (int)($data['is_active'] ?? 0)
             ];
@@ -73,12 +75,30 @@ try {
                 http_response_code(400);
                 send_json_response('error', '模板名称和类型为必填项。');
             }
+            // (Plan II-2) 物理尺寸强制性配置
+            if (empty($params[':physical_size'])) {
+                http_response_code(400);
+                send_json_response('error', '物理尺寸为必填项。');
+            }
+
 
             if ($id) {
                 $params[':id'] = $id;
-                $sql = "UPDATE pos_print_templates SET template_name = :template_name, template_type = :template_type, template_content = :template_content, is_active = :is_active WHERE id = :id";
+                // Add physical_size to UPDATE
+                $sql = "UPDATE pos_print_templates SET 
+                            template_name = :template_name, 
+                            template_type = :template_type, 
+                            physical_size = :physical_size,
+                            template_content = :template_content, 
+                            is_active = :is_active 
+                        WHERE id = :id";
             } else {
-                $sql = "INSERT INTO pos_print_templates (template_name, template_type, template_content, is_active) VALUES (:template_name, :template_type, :template_content, :is_active)";
+                // Add physical_size to INSERT
+                $sql = "INSERT INTO pos_print_templates (
+                            template_name, template_type, physical_size, template_content, is_active
+                        ) VALUES (
+                            :template_name, :template_type, :physical_size, :template_content, :is_active
+                        )";
             }
             
             $pdo->prepare($sql)->execute($params);

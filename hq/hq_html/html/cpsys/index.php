@@ -2,7 +2,7 @@
 /**
  * Toptea HQ - cpsys
  * Main Entry Point
- * Engineer: Gemini | Date: 2025-10-29 | Revision: 12.9 (Load Default Templates for Variables Page)
+ * Engineer: Gemini | Date: 2025-10-31 | Revision: 13.0 (RMS Refactor)
  */
 require_once realpath(__DIR__ . '/../../core/auth_core.php');
 header('Content-Type: text/html; charset=utf-8');
@@ -17,7 +17,8 @@ if (!isset($pdo)) {
 $page = $_GET['page'] ?? 'dashboard';
 $page_js = null;
 
-if (($_SESSION['role_id'] ?? null) !== ROLE_SUPER_ADMIN && !in_array($page, ['dashboard', 'profile', 'product_list'])) {
+// Allow product managers to also access the new RMS page
+if (($_SESSION['role_id'] ?? null) !== ROLE_SUPER_ADMIN && !in_array($page, ['dashboard', 'profile', 'rms_product_management'])) {
      $page = 'access_denied';
 }
 
@@ -59,45 +60,22 @@ switch ($page) {
         $content_view = APP_PATH . '/views/cpsys/dashboard_view.php';
         break;
 
-    // ... [Other cases remain unchanged] ...
-    case 'product_list':
-        $page_title = '产品配方管理';
-        $products = getAllProducts($pdo);
-        $content_view = APP_PATH . '/views/cpsys/product_list_view.php';
-        $page_js = 'product_list.js';
-        break;
-
-    case 'product_management':
-        $page_title = '创建新配方';
-        $cup_options = getAllCups($pdo);
-        $status_options = getAllStatuses($pdo);
+    // --- NEW RMS ROUTE ---
+    case 'rms_product_management':
+        $page_title = 'RMS - 动态配方管理';
+        $base_products = getAllBaseProducts($pdo); // Fetch list for the left panel
+        // Pre-load all dictionary data for the form templates
         $material_options = getAllMaterials($pdo);
         $unit_options = getAllUnits($pdo);
-        $sweetness_options_all = getAllActiveSweetnessOptions($pdo);
-        $ice_options_all = getAllActiveIceOptions($pdo);
-        $next_sku = getNextAvailableCustomCode($pdo, 'kds_products', 'product_sku', 100);
-        $content_view = APP_PATH . '/views/cpsys/product_management_view.php';
-        $page_js = 'product_management.js';
+        $cup_options = getAllCups($pdo);
+        $sweetness_options = getAllSweetnessOptions($pdo);
+        $ice_options = getAllIceOptions($pdo);
+        $status_options = getAllStatuses($pdo);
+        $content_view = APP_PATH . '/views/cpsys/rms/rms_product_management_view.php';
+        $page_js = 'rms/rms_product_management.js';
         break;
 
-    case 'product_edit':
-        $page_title = '编辑配方';
-        $product_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-        if (!$product_id) { die("无效的配方ID。"); }
-        $product_data = getProductById($pdo, $product_id);
-        if (!$product_data) { die("未找到指定的配方。"); }
-        $product_recipes = getRecipesByProductId($pdo, $product_id);
-        $selected_options = getProductSelectedOptions($pdo, $product_id);
-        $product_adjustments = getProductAdjustments($pdo, $product_id);
-        $cup_options = getAllCups($pdo);
-        $status_options = getAllStatuses($pdo);
-        $material_options = getAllMaterials($pdo);
-        $unit_options = getAllUnits($pdo);
-        $sweetness_options_all = getAllActiveSweetnessOptions($pdo);
-        $ice_options_all = getAllActiveIceOptions($pdo);
-        $content_view = APP_PATH . '/views/cpsys/product_edit_view.php';
-        $page_js = 'product_edit.js';
-        break;
+    // --- Old product routes are now deprecated and removed ---
 
     case 'expiry_management':
         $page_title = '效期管理';
@@ -141,7 +119,7 @@ switch ($page) {
         if (!$menu_item) { die("未找到指定的商品。"); }
         $page_title = 'POS 管理 - 管理规格';
         $variants = getAllVariantsByMenuItemId($pdo, $item_id);
-        $recipes = getAllProductRecipesForSelect($pdo);
+        $recipes = getAllProductRecipesForSelect($pdo); // This will need to be adjusted later
         $content_view = APP_PATH . '/views/cpsys/pos_variants_management_view.php';
         $page_js = 'pos_variants_management.js';
         break;
@@ -223,7 +201,6 @@ switch ($page) {
         
     case 'pos_print_template_variables':
         $page_title = '系统设置 - 打印模板变量';
-        // **核心修复**: 从数据库加载默认模板
         $default_templates = [];
         $stmt = $pdo->query("SELECT template_type, template_content FROM pos_print_templates WHERE store_id IS NULL AND is_active = 1");
         while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -232,7 +209,6 @@ switch ($page) {
         $content_view = APP_PATH . '/views/cpsys/pos_print_template_variables_view.php';
         break;
 
-    // ... [Dictionary and System Settings cases remain unchanged] ...
     case 'cup_management':
         $page_title = '字典管理 - 杯型';
         $cups = getAllCups($pdo);

@@ -1,9 +1,9 @@
 <?php
 /**
  * TopTea HQ - POS Print Template Management View
- * Version: 2.1.0
- * Engineer: Gemini | Date: 2025-10-29
- * Implements A.2 / 7.A.3 - Step 1.3: BMS Configuration Interface
+ * Version: 3.0.0
+ * Engineer: Gemini | Date: 2025-10-30
+ * Update: Added CUP_STICKER and EXPIRY_LABEL types, and physical_size selector.
  */
 
 // Helper function to get a readable name for template types
@@ -11,10 +11,27 @@ function get_template_type_name($type) {
     $map = [
         'EOD_REPORT' => '日结报告 (Z-Out)',
         'RECEIPT' => '顾客小票',
-        'KITCHEN_ORDER' => '厨房出品单'
+        'KITCHEN_ORDER' => '厨房出品单',
+        'SHIFT_REPORT' => '交接班报告',
+        'CUP_STICKER' => '杯贴标签',
+        'EXPIRY_LABEL' => '效期标签'
     ];
     return $map[$type] ?? $type;
 }
+
+// (Plan II-2) 物理尺寸列表
+$physical_sizes = [
+    '80mm' => '80mm (连续纸卷)',
+    '50x30' => '50 × 30 mm (标签)',
+    '40x30' => '40 × 30 mm (标签)',
+    '58x40' => '58 × 40 mm (标签)',
+    '30x40' => '30 × 40 mm (标签)',
+    '25x40' => '25 × 40 mm (标签)',
+    '60x40' => '60 × 40 mm (标签)',
+    '40x60' => '40 × 60 mm (标签)',
+    '50x40' => '50 × 40 mm (标签)',
+    '50x70' => '50 × 70 mm (标签)'
+];
 ?>
 
 <div class="d-flex justify-content-end mb-3">
@@ -32,18 +49,30 @@ function get_template_type_name($type) {
                     <tr>
                         <th>模板名称</th>
                         <th>模板类型</th>
+                        <th>物理尺寸</th>
                         <th>状态</th>
                         <th class="text-end">操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($templates)): ?>
-                        <tr><td colspan="4" class="text-center">暂无打印模板。</td></tr>
+                        <tr><td colspan="5" class="text-center">暂无打印模板。</td></tr>
                     <?php else: ?>
                         <?php foreach ($templates as $template): ?>
                             <tr>
                                 <td><strong><?php echo htmlspecialchars($template['template_name']); ?></strong></td>
-                                <td><span class="badge text-bg-info"><?php echo htmlspecialchars(get_template_type_name($template['template_type'])); ?></span></td>
+                                <td>
+                                    <?php 
+                                        $type_name = get_template_type_name($template['template_type']);
+                                        $badge_class = 'text-bg-info';
+                                        if ($template['template_type'] === 'CUP_STICKER') $badge_class = 'text-bg-warning';
+                                        if ($template['template_type'] === 'EXPIRY_LABEL') $badge_class = 'text-bg-primary';
+                                    ?>
+                                    <span class="badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($type_name); ?></span>
+                                </td>
+                                <td>
+                                    <span class="badge text-bg-secondary"><?php echo htmlspecialchars($template['physical_size'] ?? '未设置'); ?></span>
+                                </td>
                                 <td>
                                     <?php if ($template['is_active']): ?>
                                         <span class="badge text-bg-success">已启用</span>
@@ -83,15 +112,31 @@ function get_template_type_name($type) {
                 <label for="template_name" class="form-label">模板名称 <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="template_name" name="template_name" required>
             </div>
-            <div class="mb-3">
-                <label for="template_type" class="form-label">模板类型 <span class="text-danger">*</span></label>
-                <select class="form-select" id="template_type" name="template_type" required>
-                    <option value="" selected disabled>-- 请选择 --</option>
-                    <option value="EOD_REPORT">日结报告 (Z-Out)</option>
-                    <option value="RECEIPT">顾客小票</option>
-                    <option value="KITCHEN_ORDER">厨房出品单</option>
-                </select>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="template_type" class="form-label">模板类型 <span class="text-danger">*</span></label>
+                    <select class="form-select" id="template_type" name="template_type" required>
+                        <option value="" selected disabled>-- 请选择 --</option>
+                        <option value="RECEIPT">顾客小票</option>
+                        <option value="KITCHEN_ORDER">厨房出品单</option>
+                        <option value="CUP_STICKER">杯贴标签</option>
+                        <option value="EXPIRY_LABEL">效期标签</option>
+                        <option value="EOD_REPORT">日结报告 (Z-Out)</option>
+                        <option value="SHIFT_REPORT">交接班报告</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="physical_size" class="form-label">物理尺寸 <span class="text-danger">*</span></label>
+                    <select class="form-select" id="physical_size" name="physical_size" required>
+                        <option value="" selected disabled>-- 请选择尺寸 --</option>
+                        <?php foreach ($physical_sizes as $value => $label): ?>
+                            <option value="<?php echo $value; ?>"><?php echo htmlspecialchars($label); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
+
              <div class="form-check form-switch mb-3">
                 <input class="form-check-input" type="checkbox" role="switch" id="is_active" name="is_active" value="1" checked>
                 <label class="form-check-label" for="is_active">启用此模板</label>

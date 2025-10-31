@@ -1,9 +1,9 @@
 <?php
 /**
  * TopTea HQ - POS Print Template Variables View
- * Version: 2.1.1
- * Engineer: Gemini | Date: 2025-10-29
- * Description: Displays available variables and default templates.
+ * Version: 3.1.0
+ * Engineer: Gemini | Date: 2025-10-30
+ * Update: Added variables and default template for EXPIRY_LABEL (Plan II-3, II-4).
  */
 
 // Helper to format and display JSON
@@ -27,6 +27,49 @@ function render_json_template($title, $json_content) {
     echo '</div>';
     echo '</div>';
 }
+
+// (New) Define default template for Expiry Label
+$default_templates['EXPIRY_LABEL'] = '[
+    {
+        "type": "text",
+        "value": "**{material_name}**",
+        "align": "left",
+        "size": "double"
+    },
+    {
+        "type": "text",
+        "value": "**{material_name_es}**",
+        "align": "left",
+        "size": "double"
+    },
+    {
+        "type": "divider",
+        "char": "-"
+    },
+    {
+        "type": "kv",
+        "key": "开封 ABRE",
+        "value": "{opened_at_time}"
+    },
+    {
+        "type": "kv",
+        "key": "过期 CADUCA",
+        "value": "**{expires_at_time}**",
+        "bold_value": true
+    },
+    {
+        "type": "kv",
+        "key": "操作员",
+        "value": "{operator_name}"
+    },
+    {
+        "type": "feed",
+        "lines": 1
+    },
+    {
+        "type": "cut"
+    }
+]';
 ?>
 
 <div class="row">
@@ -113,6 +156,52 @@ function render_json_template($title, $json_content) {
             </div>
         </div>
     </div>
+
+    <!-- NEW SECTION: CUP_STICKER (Plan II-4) -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning text-dark">
+                杯贴标签 (CUP_STICKER) 变量
+            </div>
+            <div class="card-body">
+                <p class="card-text">用于 `CUP_STICKER` 类型的模板。此数据包由 `submit_order.php` 针对订单中的 *每一项商品* 单独生成。</p>
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>变量</th><th>说明</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>{cup_order_number}</code></td><td>杯号 (例如: A2025-XXXX)</td></tr>
+                        <tr><td><code>{item_name}</code></td><td>商品名称 (例如: 珍珠奶茶)</td></tr>
+                        <tr><td><code>{variant_name}</code></td><td>规格名称 (例如: 中杯)</td></tr>
+                        <tr><td><code>{customization_detail}</code></td><td>定制详情 (例如: 少冰/50%糖/加珍珠)</td></tr>
+                        <tr><td><code>{remark}</code></td><td>备注信息</td></tr>
+                        <tr><td><code>{store_name}</code></td><td>门店名称</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW SECTION: EXPIRY_LABEL (Plan II-3) -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                效期标签 (EXPIRY_LABEL) 变量
+            </div>
+            <div class="card-body">
+                <p class="card-text">用于 `EXPIRY_LABEL` 类型的模板。此数据包由 KDS 端的 `record_expiry_item.php` 在开封/制备时生成。</p>
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>变量</th><th>说明</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>{material_name}</code></td><td>物料名称 (中文)</td></tr>
+                        <tr><td><code>{material_name_es}</code></td><td>物料名称 (西语)</td></tr>
+                        <tr><td><code>{opened_at_time}</code></td><td>开封/制备时间 (YYYY-MM-DD HH:MM)</td></tr>
+                        <tr><td><code>{expires_at_time}</code></td><td>过期时间 (YYYY-MM-DD HH:MM)</td></tr>
+                        <tr><td><code>{time_left}</code></td><td>剩余时间 (格式化文本, e.g., 3小时5分钟)</td></tr>
+                        <tr><td><code>{operator_name}</code></td><td>操作员工姓名</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <hr class="my-4">
@@ -124,6 +213,9 @@ function render_json_template($title, $json_content) {
         render_json_template('默认顾客小票 (RECEIPT)', $default_templates['RECEIPT'] ?? '');
         render_json_template('默认厨房出品单 (KITCHEN_ORDER)', $default_templates['KITCHEN_ORDER'] ?? '');
         render_json_template('默认日结报告 (EOD_REPORT)', $default_templates['EOD_REPORT'] ?? '');
+        // (New) Render the new default template
+        render_json_template('默认效期标签 (EXPIRY_LABEL)', $default_templates['EXPIRY_LABEL'] ?? '');
         ?>
     </div>
 </div>
+

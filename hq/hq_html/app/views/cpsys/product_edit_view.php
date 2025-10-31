@@ -62,7 +62,18 @@ foreach ($product_recipes as $recipe) {
                     <?php endforeach; ?>
                 </select>
             </div>
-            
+
+            <div class="col-md-6">
+                <label for="pos-category" class="form-label">POS 分类 (可选)</label>
+                <select id="pos-category" class="form-select">
+                    <option value="">-- 不分类 --</option>
+                    <?php foreach ($pos_category_options as $category): ?>
+                        <option value="<?php echo $category['id']; ?>" <?php echo (isset($product_data['category_id']) && $product_data['category_id'] == $category['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($category['name_zh']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="col-md-6">
                 <label class="form-label">可选甜度 (多选)</label>
                 <div class="form-control" style="height: auto;">

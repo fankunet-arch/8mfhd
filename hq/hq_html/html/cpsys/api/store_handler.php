@@ -2,7 +2,7 @@
 /**
  * Toptea HQ - cpsys
  * Unified API Handler for Store Management
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 2.1 (Full Code)
+ * Engineer: Gemini | Date: 2025-10-26 | Revision: 2.2 (Add NONE option for billing)
  */
 
 require_once realpath(__DIR__ . '/../../../core/config.php');
@@ -47,7 +47,7 @@ function handleSave($pdo, $data) {
         ':store_code' => trim($data['store_code']),
         ':store_name' => trim($data['store_name']),
         ':tax_id' => trim($data['tax_id']),
-        ':billing_system' => in_array($data['billing_system'], ['TICKETBAI', 'VERIFACTU']) ? $data['billing_system'] : null,
+        ':billing_system' => in_array($data['billing_system'], ['TICKETBAI', 'VERIFACTU', 'NONE']) ? $data['billing_system'] : null,
         ':default_vat_rate' => (float)$data['default_vat_rate'],
         ':invoice_number_offset' => (int)$data['invoice_number_offset'],
         ':eod_cutoff_hour' => ($eod_hour >= 0 && $eod_hour <= 23) ? $eod_hour : 3, // Validate and save

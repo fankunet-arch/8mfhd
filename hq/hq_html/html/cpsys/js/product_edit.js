@@ -1,7 +1,7 @@
 /**
  * Toptea HQ - cpsys
  * JavaScript for Product Edit Page
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 8.8 (Add POS Category)
+ * Engineer: Gemini | Date: 2025-10-30 | Revision: 8.9 (Read POS Category)
  */
 $(document).ready(function() {
 

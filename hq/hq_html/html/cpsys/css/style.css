@@ -3,8 +3,8 @@
  * Custom Stylesheet
  *
  * Engineer: Gemini
- * Date: 2025-10-28
- * Revision: 1.6 (Form Control Dark Theme Fix)
+ * Date: 2025-10-31
+ * Revision: 1.7 (Expiry Management Tab UI Fix)
  */
 
 :root {
@@ -65,6 +65,28 @@ body {
     color: white;
     font-weight: 500;
 }
+
+/* --- FIX: Styles for Tabbed Navigation in Card Header --- */
+.card-header .nav-tabs {
+    border-bottom: none;
+    margin-bottom: -1px; /* Align with card body */
+}
+.card-header .nav-tabs .nav-link {
+    color: rgba(255, 255, 255, 0.7); /* Lighter color for inactive tabs */
+    border: none;
+    background: transparent;
+}
+.card-header .nav-tabs .nav-link:hover {
+    color: #fff;
+}
+.card-header .nav-tabs .nav-link.active {
+    background-color: var(--card-bg); /* Match the card body bg */
+    color: var(--brand-color); /* Use brand color for active text */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom-color: var(--card-bg);
+    font-weight: 600;
+}
+/* --- END OF FIX --- */
 
 .accordion-button:not(.collapsed) {
     background-color: var(--brand-color);

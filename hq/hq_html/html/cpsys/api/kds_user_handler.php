@@ -1,124 +1,109 @@
 <?php
 /**
  * Toptea HQ - cpsys
- * KDS Data Helper Functions
- * Engineer: Gemini | Date: 2025-10-24 | Revision: 5.1 (Final Feature Completion)
+ * API Handler for KDS User Management
+ * Engineer: Gemini | Date: 2025-10-30 | Revision: 6.0 (Complete Functional Fix)
  */
 
-// --- Functions for Dynamic Adjustments (Product Create/Edit) ---
-function getAllActiveIceOptions(PDO $pdo): array {
-    $sql = "SELECT i.id, it_zh.ice_option_name AS name_zh FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' WHERE i.deleted_at IS NULL ORDER BY i.ice_code ASC";
-    $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
-}
-function getAllActiveSweetnessOptions(PDO $pdo): array {
-    $sql = "SELECT s.id, st_zh.sweetness_option_name AS name_zh FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' WHERE s.deleted_at IS NULL ORDER BY s.sweetness_code ASC";
-    $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
-}
-function getProductSelectedOptions(PDO $pdo, int $product_id): array {
-    $options = ['sweetness' => [], 'ice' => []];
-    $stmt_sweetness = $pdo->prepare("SELECT sweetness_option_id FROM kds_product_sweetness_options WHERE product_id = ?");
-    $stmt_sweetness->execute([$product_id]);
-    $options['sweetness'] = $stmt_sweetness->fetchAll(PDO::FETCH_COLUMN, 0);
+require_once realpath(__DIR__ . '/../../../core/config.php');
+require_once APP_PATH . '/helpers/kds_helper.php';
+require_once APP_PATH . '/helpers/auth_helper.php';
 
-    $stmt_ice = $pdo->prepare("SELECT ice_option_id FROM kds_product_ice_options WHERE product_id = ?");
-    $stmt_ice->execute([$product_id]);
-    $options['ice'] = $stmt_ice->fetchAll(PDO::FETCH_COLUMN, 0);
-    return $options;
+header('Content-Type: application/json; charset=utf-8');
+function send_json_response($status, $message, $data = null) { echo json_encode(['status' => $status, 'message' => $message, 'data' => $data]); exit; }
+
+@session_start();
+// Security check: Only Super Admins can manage KDS users
+if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] !== ROLE_SUPER_ADMIN) {
+    http_response_code(403);
+    send_json_response('error', '权限不足。');
 }
-function getProductAdjustments(PDO $pdo, int $product_id): array {
-    $stmt = $pdo->prepare("SELECT * FROM kds_product_adjustments WHERE product_id = ?");
-    $stmt->execute([$product_id]);
-    $results = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $results[$row['option_type']][$row['option_id']] = $row;
+
+$action = '';
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
+    $action = $_GET['action'];
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $json_data = json_decode(file_get_contents('php://input'), true);
+    if (isset($json_data['action'])) {
+        $action = $json_data['action'];
     }
-    return $results;
 }
 
-// --- Sweetness Option Management Functions ---
-function getAllSweetnessOptions(PDO $pdo): array {
-    $sql = "SELECT s.id, s.sweetness_code, st_zh.sweetness_option_name AS name_zh, st_es.sweetness_option_name AS name_es FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' LEFT JOIN kds_sweetness_option_translations st_es ON s.id = st_es.sweetness_option_id AND st_es.language_code = 'es-ES' WHERE s.deleted_at IS NULL ORDER BY s.sweetness_code ASC";
-    $stmt = $pdo->query($sql); return $stmt->fetchAll();
-}
-function getSweetnessOptionById(PDO $pdo, int $id) {
-    $sql = "SELECT s.id, s.sweetness_code, st_zh.sweetness_option_name AS name_zh, st_es.sweetness_option_name AS name_es FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' LEFT JOIN kds_sweetness_option_translations st_es ON s.id = st_es.sweetness_option_id AND st_es.language_code = 'es-ES' WHERE s.id = ? AND s.deleted_at IS NULL";
-    $stmt = $pdo->prepare($sql); $stmt->execute([$id]); return $stmt->fetch();
-}
+try {
+    switch ($action) {
+        case 'get':
+            $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+            if (!$id) { send_json_response('error', '无效的用户ID。'); }
+            
+            $user_data = getKdsUserById($pdo, $id);
+            if ($user_data) {
+                send_json_response('success', '用户数据加载成功。', $user_data);
+            } else {
+                http_response_code(404);
+                send_json_response('error', '未找到指定用户。');
+            }
+            break;
 
-// --- Ice Option Management Functions ---
-function getAllIceOptions(PDO $pdo): array {
-    $sql = "SELECT i.id, i.ice_code, it_zh.ice_option_name AS name_zh, it_es.ice_option_name AS name_es FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' LEFT JOIN kds_ice_option_translations it_es ON i.id = it_es.ice_option_id AND it_es.language_code = 'es-ES' WHERE i.deleted_at IS NULL ORDER BY i.ice_code ASC";
-    $stmt = $pdo->query($sql); return $stmt->fetchAll();
-}
-function getIceOptionById(PDO $pdo, int $id) {
-    $sql = "SELECT i.id, i.ice_code, it_zh.ice_option_name AS name_zh, it_es.ice_option_name AS name_es FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' LEFT JOIN kds_ice_option_translations it_es ON i.id = it_es.ice_option_id AND it_es.language_code = 'es-ES' WHERE i.id = ? AND i.deleted_at IS NULL";
-    $stmt = $pdo->prepare($sql); $stmt->execute([$id]); return $stmt->fetch();
-}
+        case 'save':
+            $data = $json_data['data'];
+            $id = $data['id'] ? (int)$data['id'] : null;
 
-// --- Unit Management Functions ---
-function getAllUnits(PDO $pdo): array {
-    $sql = "SELECT u.id, u.unit_code, ut_zh.unit_name AS name_zh, ut_es.unit_name AS name_es FROM kds_units u LEFT JOIN kds_unit_translations ut_zh ON u.id = ut_zh.unit_id AND ut_zh.language_code = 'zh-CN' LEFT JOIN kds_unit_translations ut_es ON u.id = ut_es.unit_id AND ut_es.language_code = 'es-ES' WHERE u.deleted_at IS NULL ORDER BY u.unit_code ASC";
-    $stmt = $pdo->query($sql); return $stmt->fetchAll();
-}
-function getUnitById(PDO $pdo, int $id) {
-    $sql = "SELECT u.id, u.unit_code, ut_zh.unit_name AS name_zh, ut_es.unit_name AS name_es FROM kds_units u LEFT JOIN kds_unit_translations ut_zh ON u.id = ut_zh.unit_id AND ut_zh.language_code = 'zh-CN' LEFT JOIN kds_unit_translations ut_es ON u.id = ut_es.unit_id AND ut_es.language_code = 'es-ES' WHERE u.id = ? AND u.deleted_at IS NULL";
-    $stmt = $pdo->prepare($sql); $stmt->execute([$id]); return $stmt->fetch();
-}
+            $params = [
+                ':store_id' => (int)$data['store_id'],
+                ':username' => trim($data['username']),
+                ':display_name' => trim($data['display_name']),
+                ':is_active' => (int)($data['is_active'] ?? 0),
+            ];
 
-// --- Material Management Functions ---
-function getAllMaterials(PDO $pdo): array {
-    $sql = "SELECT m.id, m.material_code, mt_zh.material_name AS name_zh, mt_es.material_name AS name_es FROM kds_materials m LEFT JOIN kds_material_translations mt_zh ON m.id = mt_zh.material_id AND mt_zh.language_code = 'zh-CN' LEFT JOIN kds_material_translations mt_es ON m.id = mt_es.material_id AND mt_es.language_code = 'es-ES' WHERE m.deleted_at IS NULL ORDER BY m.material_code ASC";
-    $stmt = $pdo->query($sql); return $stmt->fetchAll();
-}
-function getMaterialById(PDO $pdo, int $id) {
-    $sql = "SELECT m.id, m.material_code, mt_zh.material_name AS name_zh, mt_es.material_name AS name_es FROM kds_materials m LEFT JOIN kds_material_translations mt_zh ON m.id = mt_zh.material_id AND mt_zh.language_code = 'zh-CN' LEFT JOIN kds_material_translations mt_es ON m.id = mt_es.material_id AND mt_es.language_code = 'es-ES' WHERE m.id = ? AND m.deleted_at IS NULL";
-    $stmt = $pdo->prepare($sql); $stmt->execute([$id]); return $stmt->fetch();
-}
+            if (empty($params[':username']) || empty($params[':display_name'])) {
+                send_json_response('error', '用户名和显示名称为必填项。');
+            }
 
-// --- Cup Management Functions ---
-function getAllCups(PDO $pdo): array {
-    $stmt = $pdo->query("SELECT id, cup_code, cup_name FROM kds_cups WHERE deleted_at IS NULL ORDER BY cup_code ASC");
-    return $stmt->fetchAll();
-}
-function getCupById(PDO $pdo, int $id) {
-    $stmt = $pdo->prepare("SELECT id, cup_code, cup_name FROM kds_cups WHERE id = ? AND deleted_at IS NULL");
-    $stmt->execute([$id]);
-    return $stmt->fetch();
-}
+            // Check for duplicate username within the same store
+            $sql_check = "SELECT id FROM kds_users WHERE username = :username AND store_id = :store_id AND deleted_at IS NULL";
+            if ($id) { $sql_check .= " AND id != :id"; $params_check = array_merge($params, [':id' => $id]); } else { $params_check = $params; }
+            $stmt_check = $pdo->prepare($sql_check);
+            $stmt_check->execute([':username' => $params[':username'], ':store_id' => $params[':store_id'], ':id' => $id]);
+            if ($stmt_check->fetch()) {
+                http_response_code(409);
+                send_json_response('error', '该门店下已存在相同的用户名。');
+            }
 
-// --- Product Management & Other Stable Functions ---
-function getAllStatuses(PDO $pdo): array {
-    $stmt = $pdo->query("SELECT id, status_name FROM kds_product_statuses ORDER BY status_code ASC");
-    return $stmt->fetchAll();
-}
-function getAllProducts(PDO $pdo): array {
-    $sql = "SELECT p.id, p.product_sku, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es, c.cup_name, ps.status_name, p.is_active, p.created_at FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' LEFT JOIN kds_cups c ON p.cup_id = c.id LEFT JOIN kds_product_statuses ps ON p.status_id = ps.id WHERE p.deleted_at IS NULL ORDER BY p.product_sku ASC";
-    $stmt = $pdo->query($sql); return $stmt->fetchAll();
-}
-function getProductById(PDO $pdo, int $id) {
-    $sql = "SELECT p.*, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' WHERE p.id = ? AND p.deleted_at IS NULL";
-    $stmt = $pdo->prepare($sql); $stmt->execute([$id]); return $stmt->fetch();
-}
-function getRecipesByProductId(PDO $pdo, int $id): array {
-    $stmt = $pdo->prepare("SELECT * FROM kds_product_recipes WHERE product_id = ? ORDER BY step_category, sort_order ASC");
-    $stmt->execute([$id]); return $stmt->fetchAll();
-}
-function getNextAvailableCustomCode(PDO $pdo, string $tableName, string $codeColumnName, int $start_from = 1): int {
-    $tableName = preg_replace('/[^a-zA-Z0-9_]/', '', $tableName); $codeColumnName = preg_replace('/[^a-zA-Z0-9_]/', '', $codeColumnName);
-    $sql = "SELECT {$codeColumnName} FROM {$tableName} WHERE deleted_at IS NULL AND {$codeColumnName} >= :start_from ORDER BY {$codeColumnName} ASC";
-    $stmt = $pdo->prepare($sql); $stmt->execute([':start_from' => $start_from]);
-    $existing_codes = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-    $i = $start_from;
-    while (in_array($i, $existing_codes)) { $i++; }
-    return $i;
-}
+            if ($id) { // Update
+                if (!empty($data['password'])) {
+                    $params[':password_hash'] = hash('sha256', $data['password']);
+                    $sql = "UPDATE kds_users SET display_name = :display_name, password_hash = :password_hash, is_active = :is_active WHERE id = :id";
+                     unset($params[':username'], $params[':store_id']); // Cannot change username or store
+                } else {
+                    $sql = "UPDATE kds_users SET display_name = :display_name, is_active = :is_active WHERE id = :id";
+                     unset($params[':password_hash'], $params[':username'], $params[':store_id']);
+                }
+                $params[':id'] = $id;
+                $message = 'KDS账户已成功更新！';
+            } else { // Create
+                if (empty($data['password'])) { send_json_response('error', '创建新账户时必须设置密码。'); }
+                $params[':password_hash'] = hash('sha256', $data['password']);
+                $sql = "INSERT INTO kds_users (store_id, username, display_name, password_hash, is_active) VALUES (:store_id, :username, :display_name, :password_hash, :is_active)";
+                $message = '新KDS账户已成功创建！';
+            }
+            
+            $pdo->prepare($sql)->execute($params);
+            send_json_response('success', $message);
+            break;
 
-// --- Store Management Functions ---
-function getAllStores(PDO $pdo): array { /* ... */ }
-function getStoreById(PDO $pdo, int $id) { /* ... */ }
+        case 'delete':
+            $id = (int)($json_data['id'] ?? 0);
+            if (!$id) { send_json_response('error', '无效的ID。'); }
+            $stmt = $pdo->prepare("UPDATE kds_users SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $stmt->execute([$id]);
+            send_json_response('success', 'KDS账户已成功删除。');
+            break;
 
-// --- KDS User Management Functions (for cpsys) ---
-function getAllKdsUsersByStoreId(PDO $pdo, int $store_id): array { /* ... */ }
-function getKdsUserById(PDO $pdo, int $id) { /* ... */ }
+        default:
+            http_response_code(400);
+            send_json_response('error', '无效的操作请求。');
+    }
+} catch (PDOException $e) {
+    http_response_code(500);
+    send_json_response('error', '数据库操作失败。', ['debug' => $e->getMessage()]);
+}

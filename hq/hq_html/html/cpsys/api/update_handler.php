@@ -2,7 +2,7 @@
 /**
  * Toptea HQ - cpsys
  * Public API Gateway for Updating Products
- * Engineer: Gemini | Date: 2025-10-26 | Revision: 8.8 (Add POS Category)
+ * Engineer: Gemini | Date: 2025-10-30 | Revision: 8.9 (Fix column name and NULL handling)
  */
 require_once realpath(__DIR__ . '/../../../core/config.php');
 header('Content-Type: application/json; charset=utf-8');
@@ -40,8 +40,11 @@ try {
 
     // 2. 更新产品主表
     // --- START: CORE FIX ---
-    $stmt_update_product = $pdo->prepare("UPDATE kds_products SET product_sku = ?, cup_id = ?, pos_category_id = ?, status_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-    $stmt_update_product->execute([$data['sku'], $data['cup_id'], (int)($data['pos_category_id'] ?? 0), $data['status_id'], $product_id]);
+    // Corrected column name from `pos_category_id` to `category_id`
+    // Added logic to handle NULL for 'no category'
+    $pos_category_id = !empty($data['pos_category_id']) ? (int)$data['pos_category_id'] : null;
+    $stmt_update_product = $pdo->prepare("UPDATE kds_products SET product_sku = ?, cup_id = ?, category_id = ?, status_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+    $stmt_update_product->execute([$data['sku'], $data['cup_id'], $pos_category_id, $data['status_id'], $product_id]);
     // --- END: CORE FIX ---
 
     // 3. 更新产品翻译表

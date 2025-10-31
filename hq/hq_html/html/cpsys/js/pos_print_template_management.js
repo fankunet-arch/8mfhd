@@ -1,7 +1,8 @@
 /**
  * TopTea HQ - JavaScript for POS Print Template Management
- * Version: 2.1.0
- * Engineer: Gemini | Date: 2025-10-29
+ * Version: 3.0.0
+ * Engineer: Gemini | Date: 2025-10-30
+ * Update: Added physical_size field.
  */
 $(document).ready(function() {
     const dataDrawer = new bootstrap.Offcanvas(document.getElementById('data-drawer'));
@@ -15,6 +16,7 @@ $(document).ready(function() {
         form[0].reset();
         dataIdInput.val('');
         $('#is_active').prop('checked', true);
+        $('#physical_size').val('80mm'); // 默认 80mm
         // Pre-fill with a basic structure for convenience
         $('#template_content').val('[\n    {\n        "type": "text",\n        "value": "Your Text Here",\n        "align": "center"\n    }\n]');
     });
@@ -36,6 +38,7 @@ $(document).ready(function() {
                     const tpl = response.data;
                     $('#template_name').val(tpl.template_name);
                     $('#template_type').val(tpl.template_type);
+                    $('#physical_size').val(tpl.physical_size); // Set physical size
                     $('#is_active').prop('checked', tpl.is_active == 1);
                     // Format JSON for better readability
                     try {
@@ -72,9 +75,20 @@ $(document).ready(function() {
             id: dataIdInput.val(),
             template_name: $('#template_name').val(),
             template_type: $('#template_type').val(),
+            physical_size: $('#physical_size').val(), // Get physical size
             template_content: contentVal,
             is_active: $('#is_active').is(':checked') ? 1 : 0
         };
+
+        // 验证
+        if (!formData.template_type) {
+            alert('请选择模板类型！');
+            return;
+        }
+        if (!formData.physical_size) {
+            alert('请选择物理尺寸！');
+            return;
+        }
 
         $.ajax({
             url: 'api/print_template_handler.php',

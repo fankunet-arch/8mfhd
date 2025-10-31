@@ -2,11 +2,13 @@
 /**
  * Toptea HQ - cpsys
  * Main Layout File
- * Engineer: Gemini | Date: 2025-10-29 | Revision: 12.8 (Print Template Variables Link)
+ * Engineer: Gemini | Date: 2025-10-31 | Revision: 13.0 (RMS Refactor)
  */
 $page_title = $page_title ?? 'TopTea HQ';
 $page = $_GET['page'] ?? 'dashboard';
 
+// Updated page groups for menu highlighting
+$rmsPages = ['rms_product_management'];
 $posPages = ['pos_menu_management', 'pos_variants_management', 'pos_category_management', 'pos_invoice_list', 'pos_invoice_detail', 'pos_promotion_management', 'pos_eod_reports', 'pos_member_level_management', 'pos_member_management', 'pos_member_settings', 'pos_point_redemption_rules'];
 $dictionaryPages = ['cup_management', 'material_management', 'unit_management', 'ice_option_management', 'sweetness_option_management'];
 $systemPages = ['user_management', 'store_management', 'kds_user_management', 'pos_print_template_management', 'pos_print_template_variables'];
@@ -33,8 +35,8 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?php echo (in_array($page, ['product_list', 'product_management', 'product_edit'])) ? 'active' : ''; ?>" href="index.php?page=product_list">
-                        <i class="bi bi-cup-straw me-2"></i>产品配方管理
+                    <a class="nav-link <?php echo (in_array($page, $rmsPages)) ? 'active' : ''; ?>" href="index.php?page=rms_product_management">
+                        <i class="bi bi-cup-straw me-2"></i>配方管理 (RMS)
                     </a>
                 </li>
                 <li class="nav-item">

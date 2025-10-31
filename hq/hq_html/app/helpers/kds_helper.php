@@ -2,8 +2,68 @@
 /**
  * Toptea HQ - cpsys
  * KDS Data Helper Functions
- * Engineer: Gemini | Date: 2025-10-28 | Revision: 11.5 (Member Management Functions)
+ * Engineer: Gemini | Date: 2025-10-31 | Revision: 12.0 (RMS Refactor)
  */
+
+// --- RMS: New Functions for Dynamic Recipe Engine ---
+
+/**
+ * 获取所有基础产品列表 (用于RMS左侧列表)
+ */
+function getAllBaseProducts(PDO $pdo): array {
+    $sql = "
+        SELECT 
+            p.id, 
+            p.product_code, 
+            pt_zh.product_name AS name_zh,
+            pt_es.product_name AS name_es
+        FROM kds_products p
+        LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN'
+        LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES'
+        WHERE p.deleted_at IS NULL
+        ORDER BY p.product_code ASC
+    ";
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * 获取一个产品的完整详情，包括基础配方和所有调整规则
+ */
+function getProductDetailsForRMS(PDO $pdo, int $productId): ?array {
+    // 1. 获取基础产品信息
+    $stmt_product = $pdo->prepare("
+        SELECT 
+            p.id, 
+            p.product_code,
+            pt_zh.product_name AS name_zh,
+            pt_es.product_name AS name_es,
+            p.status_id,
+            p.is_active
+        FROM kds_products p
+        LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN'
+        LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES'
+        WHERE p.id = ? AND p.deleted_at IS NULL
+    ");
+    $stmt_product->execute([$productId]);
+    $product = $stmt_product->fetch(PDO::FETCH_ASSOC);
+
+    if (!$product) {
+        return null;
+    }
+
+    // 2. 获取基础配方步骤
+    $product['base_recipes'] = getRecipesByProductId($pdo, $productId);
+
+    // 3. 获取所有调整规则
+    $stmt_adjustments = $pdo->prepare("SELECT * FROM kds_recipe_adjustments WHERE product_id = ?");
+    $stmt_adjustments->execute([$productId]);
+    $product['adjustments'] = $stmt_adjustments->fetchAll(PDO::FETCH_ASSOC);
+
+    return $product;
+}
+
+
+// --- Existing functions below (some might be deprecated later but kept for now) ---
 
 // --- Stock System Functions ---
 function getWarehouseStock(PDO $pdo): array {
@@ -57,13 +117,15 @@ function getAllStoreStock(PDO $pdo): array {
 function getAllExpiryItems(PDO $pdo): array {
     $sql = "
         SELECT 
-            e.id, e.batch_code, e.opened_at, e.expires_at, e.status,
+            e.id, e.opened_at, e.expires_at, e.status, e.handled_at,
             mt.material_name,
-            s.store_name
+            s.store_name,
+            u.display_name AS handler_name
         FROM kds_material_expiries e
         JOIN kds_material_translations mt ON e.material_id = mt.material_id AND mt.language_code = 'zh-CN'
         JOIN kds_stores s ON e.store_id = s.id
-        ORDER BY e.expires_at ASC
+        LEFT JOIN kds_users u ON e.handler_id = u.id
+        ORDER BY e.expires_at DESC
     ";
     $stmt = $pdo->query($sql);
     return $stmt->fetchAll();
@@ -72,12 +134,12 @@ function getAllExpiryItems(PDO $pdo): array {
 
 // --- Functions for Dynamic Adjustments (Newly Added) ---
 function getAllActiveIceOptions(PDO $pdo): array {
-    $sql = "SELECT i.id, it_zh.ice_option_name AS name_zh, it_zh.sop_description AS sop_zh FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' WHERE i.deleted_at IS NULL ORDER BY i.ice_code ASC";
+    $sql = "SELECT i.id, i.ice_code, it_zh.ice_option_name AS name_zh, it_zh.sop_description AS sop_zh FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' WHERE i.deleted_at IS NULL ORDER BY i.ice_code ASC";
     $stmt = $pdo->query($sql);
     return $stmt->fetchAll();
 }
 function getAllActiveSweetnessOptions(PDO $pdo): array {
-    $sql = "SELECT s.id, st_zh.sweetness_option_name AS name_zh, st_zh.sop_description AS sop_zh FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' WHERE s.deleted_at IS NULL ORDER BY s.sweetness_code ASC";
+    $sql = "SELECT s.id, s.sweetness_code, st_zh.sweetness_option_name AS name_zh, st_zh.sop_description AS sop_zh FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' WHERE s.deleted_at IS NULL ORDER BY s.sweetness_code ASC";
     $stmt = $pdo->query($sql);
     return $stmt->fetchAll();
 }
@@ -203,11 +265,11 @@ function getMaterialById(PDO $pdo, int $id) {
 
 // --- Cup Management Functions ---
 function getAllCups(PDO $pdo): array {
-    $stmt = $pdo->query("SELECT id, cup_code, cup_name, sop_description_zh FROM kds_cups WHERE deleted_at IS NULL ORDER BY cup_code ASC");
+    $stmt = $pdo->query("SELECT id, cup_code, cup_name, sop_description_zh, volume_ml FROM kds_cups WHERE deleted_at IS NULL ORDER BY cup_code ASC");
     return $stmt->fetchAll();
 }
 function getCupById(PDO $pdo, int $id) {
-    $stmt = $pdo->prepare("SELECT id, cup_code, cup_name, sop_description_zh, sop_description_es FROM kds_cups WHERE id = ? AND deleted_at IS NULL");
+    $stmt = $pdo->prepare("SELECT id, cup_code, cup_name, sop_description_zh, sop_description_es, volume_ml FROM kds_cups WHERE id = ? AND deleted_at IS NULL");
     $stmt->execute([$id]);
     return $stmt->fetch();
 }
@@ -218,7 +280,7 @@ function getAllStatuses(PDO $pdo): array {
     return $stmt->fetchAll();
 }
 function getAllProducts(PDO $pdo): array {
-    $sql = "SELECT p.id, p.product_sku, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es, c.cup_name, ps.status_name, p.is_active, p.created_at FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' LEFT JOIN kds_cups c ON p.cup_id = c.id LEFT JOIN kds_product_statuses ps ON p.status_id = ps.id WHERE p.deleted_at IS NULL ORDER BY p.product_sku ASC";
+    $sql = "SELECT p.id, p.product_code, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es, ps.status_name, p.is_active, p.created_at FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' LEFT JOIN kds_product_statuses ps ON p.status_id = ps.id WHERE p.deleted_at IS NULL ORDER BY p.product_code ASC";
     $stmt = $pdo->query($sql);
     return $stmt->fetchAll();
 }
@@ -325,12 +387,8 @@ function getAllVariantsByMenuItemId(PDO $pdo, int $menu_item_id): array {
             pv.variant_name_zh,
             pv.price_eur,
             pv.sort_order,
-            pv.is_default,
-            kp.product_sku,
-            kpt.product_name AS recipe_name_zh
+            pv.is_default
         FROM pos_item_variants pv
-        JOIN kds_products kp ON pv.product_id = kp.id
-        LEFT JOIN kds_product_translations kpt ON kp.id = kpt.product_id AND kpt.language_code = 'zh-CN'
         WHERE pv.menu_item_id = ? AND pv.deleted_at IS NULL
         ORDER BY pv.sort_order ASC, pv.id ASC
     ";
@@ -343,12 +401,12 @@ function getAllProductRecipesForSelect(PDO $pdo): array {
     $sql = "
         SELECT 
             p.id,
-            p.product_sku,
+            p.product_code,
             pt.product_name AS name_zh
         FROM kds_products p
         LEFT JOIN kds_product_translations pt ON p.id = pt.product_id AND pt.language_code = 'zh-CN'
         WHERE p.deleted_at IS NULL
-        ORDER BY p.product_sku ASC
+        ORDER BY p.product_code ASC
     ";
     return $pdo->query($sql)->fetchAll();
 }
