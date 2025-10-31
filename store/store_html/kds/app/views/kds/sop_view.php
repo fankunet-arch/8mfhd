@@ -4,27 +4,23 @@
         <form id="sku-search-form" class="d-flex gap-2">
             <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-                <input type="number" class="form-control" id="sku-input" placeholder="输入饮品编码..." required data-i18n-key="placeholder_sku">
+                <input type="text" class="form-control" id="sku-input" placeholder="输入产品编码..." required data-i18n-key="placeholder_sku">
             </div>
             <button class="btn btn-primary" type="submit" style="background-color: var(--brand-500); border-color: var(--brand-500);"><i class="bi bi-search"></i></button>
         </form>
-        <div class="kds-mode-row">
-          <div class="kds-mode-switch" role="tablist" aria-label="显示模式">
-            <a class="kds-mode-btn" href="#"><i class="bi bi-sliders"></i> <span data-i18n-key="btn_mode_quantity">用量版</span></a>
-            <span class="kds-mode-divider" aria-hidden="true"></span>
-            <a class="kds-mode-btn active" href="#"><i class="bi bi-journal-check"></i> <span data-i18n-key="btn_mode_sop">SOP版</span></a>
-          </div>
-        </div>
       </div>
+      
       <div id="product-info-area">
           <div class="kds-cup-number mb-2 text-muted">---</div>
           <h3 class="fw-bold mb-3 text-muted" data-i18n-key="info_enter_sku">请先输入编码</h3>
           <div class="kds-info-display text-muted">--</div>
-          <ul class="kds-order-tags"></ul>
       </div>
+
+      <div id="dynamic-options-container" class="mt-3"></div>
+
       <div class="d-grid gap-3 mt-auto">
-        <button class="btn btn-success btn-touch-action" disabled><span data-i18n-key="btn_action_complete">制茶完成</span> <i class="bi bi-check-lg"></i></button>
-        <button class="btn btn-outline-danger btn-touch-action" disabled data-i18n-key="btn_action_report">缺料申报</button>
+        <button class="btn btn-complete btn-touch-action" disabled><span data-i18n-key="btn_action_complete">制茶完成</span> <i class="bi bi-check-lg"></i></button>
+        <button class="btn btn-report btn-touch-action" disabled data-i18n-key="btn_action_report">缺料申报</button>
       </div>
       <div class="kds-side-cp" id="kds-side-cp">© <span id="cp-year">2025</span> TOPTEA</div>
     </div>
