@@ -1,7 +1,8 @@
 /**
  * Toptea KDS - kds_expiry.js
  * JavaScript for Expiry Tracking Page
- * Engineer: Gemini | Date: 2025-10-31 | Revision: 9.8 (FIX: Replace alert())
+ * Engineer: Gemini | Date: 2025-10-31
+ * Revision: 10.0 (Change "Discard" to "Scrap")
  */
 
 let confirmationModal = null;
@@ -9,7 +10,7 @@ let actionToConfirm = null;
 
 // 全局函数：设置并显示效期操作的确认模态框
 function setupAndShowExpiryModal(buttonElement) {
-    const I18N = { 'zh-CN': { confirm_used: '您确定要将“{materialName}”标记为【已用完】吗？', confirm_discard: '您确定要将“{materialName}”标记为【废弃】吗？此操作通常用于已过期的物品。' }, 'es-ES': { confirm_used: '¿Confirmar que "{materialName}" ha sido 【Usado】?', confirm_discard: '¿Confirmar que desea 【Desechar】 "{materialName}"? Esta acción es para artículos caducados.' } };
+    const I18N = { 'zh-CN': { confirm_used: '您确定要将“{materialName}”标记为【已用完】吗？', confirm_discard: '您确定要将“{materialName}”标记为【报废】吗？此操作通常用于已过期的物品。' }, 'es-ES': { confirm_used: '¿Confirmar que "{materialName}" ha sido 【Usado】?', confirm_discard: '¿Confirmar que desea 【Desechar】 "{materialName}"? Esta acción es para artículos caducados.' } };
     const currentLang = localStorage.getItem("kds_lang") || "zh-CN";
     const translations = I18N[currentLang] || I18N['zh-CN'];
 
@@ -58,7 +59,6 @@ async function performExpiryAction(buttonElement) {
         }
     } catch (error) {
         console.error('Failed to update status:', error);
-        // **【关键修复 v1.6】** (使用自定义 Alert)
         showKdsAlert(`${translations.action_failed}: ${error.message}`, true);
     } finally {
         buttonElement.disabled = false;
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    const I18N_PAGE = { 'zh-CN': { expiry_title: '效期追踪', btn_back_kds: '返回KDS', th_material: '物料', th_opened_at: '开封/制作时间', th_expires_at: '过期时间', th_time_left: '剩余时间', th_actions: '操作', btn_used: '已用完', btn_discard: '废弃', no_items: '当前没有追踪中的物品。', loading_failed: '加载效期物品失败！', time_left_format: '{d}天 {h}小时 {m}分钟', status_expired: '已过期' }, 'es-ES': { expiry_title: 'Seguimiento de Caducidad', btn_back_kds: 'Volver a KDS', th_material: 'Material', th_opened_at: 'Abierto/Preparado', th_expires_at: 'Caduca', th_time_left: 'Tiempo Restante', th_actions: 'Acciones', btn_used: 'Usado', btn_discard: 'Desechar', no_items: 'No hay artículos en seguimiento.', loading_failed: '¡Fallo al cargar artículos!', time_left_format: '{d}d {h}h {m}m', status_expired: 'Caducado' } };
+    const I18N_PAGE = { 'zh-CN': { expiry_title: '效期追踪', btn_back_kds: '返回KDS', th_material: '物料', th_opened_at: '开封/制作时间', th_expires_at: '过期时间', th_time_left: '剩余时间', th_actions: '操作', btn_used: '已用完', btn_discard: '报废', no_items: '当前没有追踪中的物品。', loading_failed: '加载效期物品失败！', time_left_format: '{d}天 {h}小时 {m}分钟', status_expired: '已过期' }, 'es-ES': { expiry_title: 'Seguimiento de Caducidad', btn_back_kds: 'Volver a KDS', th_material: 'Material', th_opened_at: 'Abierto/Preparado', th_expires_at: 'Caduca', th_time_left: 'Tiempo Restante', th_actions: 'Acciones', btn_used: 'Usado', btn_discard: 'Desechar', no_items: 'No hay artículos en seguimiento.', loading_failed: '¡Fallo al cargar artículos!', time_left_format: '{d}d {h}h {m}m', status_expired: 'Caducado' } };
     const currentLang = localStorage.getItem("kds_lang") || "zh-CN";
     const translations = I18N_PAGE[currentLang] || I18N_PAGE['zh-CN'];
     

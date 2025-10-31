@@ -200,3 +200,44 @@ body{
 
 @media (max-width:992px){.kds-left-sidebar{width:260px;}}
 @media (max-width:768px){.kds-container{flex-direction:column;} .kds-left-sidebar{width:100%;box-shadow:none;border-right:none;border-bottom:1px solid var(--line); padding-bottom: 1rem;} body{overflow:auto;} .kds-left-header{gap:.5rem;} .kds-side-cp { position: static; transform: none; text-align: center; padding-top: 1rem;}}
+
+/* --- FIX v4: FINAL Expiry Action Button Styles --- */
+/* Container for the buttons to use flexbox */
+.expiry-table td.text-end {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem; /* Space between buttons */
+}
+
+/* Base style for both buttons */
+.expiry-table .btn-action {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border-radius: 6px;
+    min-width: 90px;
+    color: #fff; /* White text for both */
+}
+
+/* Style for '已用完' (Used) button - Solid Green */
+.expiry-table .btn-outline-success {
+    background-color: var(--leaf-500);
+    border: 1px solid var(--leaf-500);
+}
+.expiry-table .btn-outline-success:hover {
+    background-color: #1a8a58; /* Darker green */
+    border-color: #1a8a58;
+}
+
+/* Style for '报废' (Discard/Scrap) button - Solid Red */
+.expiry-table .btn-outline-danger {
+    background-color: var(--danger-500);
+    border: 1px solid var(--danger-500);
+}
+.expiry-table .btn-outline-danger:hover {
+    background-color: #d73737; /* Darker red */
+    border-color: #d73737;
+}
+/* --- END OF FIX --- */
