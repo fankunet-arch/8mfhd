@@ -205,3 +205,55 @@ select[multiple]:focus {
     border-color: var(--brand-color);
     box-shadow: 0 0 0 0.25rem rgba(237, 119, 98, 0.25);
 }
+
+/* RMS UI Color Refresh based on feedback A1.png - V2 */
+
+/* 1. Make secondary card headers a lighter gray */
+#product-editor-container .card-body > .card > .card-header {
+    background-color: #374151; /* A medium-dark gray for secondary sections */
+    color: #e5e7eb;
+}
+
+/* 2. Unify the 4 main action buttons in RMS with a distinct blue color */
+#btn-add-product,
+#product-editor-container form button[type="submit"],
+#btn-add-base-recipe-row,
+#btn-add-adjustment-rule {
+    --bs-btn-color: #FFFFFF;
+    --bs-btn-bg: #0d6efd; /* Bootstrap default blue for clear identification */
+    --bs-btn-border-color: #0d6efd;
+    --bs-btn-hover-color: #FFFFFF;
+    --bs-btn-hover-bg: #0b5ed7; /* A darker blue on hover */
+    --bs-btn-hover-border-color: #0a58ca;
+    --bs-btn-active-color: #FFFFFF;
+    --bs-btn-active-bg: #0a58ca;
+    --bs-btn-active-border-color: #0a53be;
+    
+    /* Remove default outline styles if they exist */
+    --bs-btn-focus-shadow-rgb: none; 
+    box-shadow: none;
+
+    /* Apply the styles directly to override existing .btn-* classes */
+    color: var(--bs-btn-color);
+    background-color: var(--bs-btn-bg);
+    border-color: var(--bs-btn-border-color);
+}
+
+/* Override hover/active states as well */
+#btn-add-product:hover,
+#product-editor-container form button[type="submit"]:hover,
+#btn-add-base-recipe-row:hover,
+#btn-add-adjustment-rule:hover {
+    color: var(--bs-btn-hover-color);
+    background-color: var(--bs-btn-hover-bg);
+    border-color: var(--bs-btn-hover-border-color);
+}
+
+#btn-add-product:active,
+#product-editor-container form button[type="submit"]:active,
+#btn-add-base-recipe-row:active,
+#btn-add-adjustment-rule:active {
+    color: var(--bs-btn-active-color);
+    background-color: var(--bs-btn-active-bg);
+    border-color: var(--bs-btn-active-border-color);
+}
