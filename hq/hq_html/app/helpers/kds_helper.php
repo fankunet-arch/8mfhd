@@ -2,7 +2,17 @@
 /**
  * Toptea HQ - cpsys
  * KDS Data Helper Functions
- * Engineer: Gemini | Date: 2025-10-31 | Revision: 13.0 (RMS P-Code Generation Fix)
+ * Engineer: Gemini | Date: 2025-11-02 | Revision: 14.1 (RMS V2.2 - Gating Logic & CRITICAL SQL FIX)
+ *
+ * [GEMINI 500_ERROR_FIX]:
+ * 1. Moved 'getAllPosAddons' from index.php to this helper file.
+ * 2. Fixed ambiguity in 'getAllPosAddons' query: mt ON m.id = mt.material_id -> mt ON m.id = mt.material_id
+ * 3. Fixed ambiguity in 'getAllVariantsByMenuItemId': pt ON p.id = pt.product_id -> pt ON p.id = pt.product_id
+ * 4. [CRITICAL 500 FIX] Added COALESCE to 'getAllVariantsByMenuItemId' to handle NULL product_codes,
+ * which caused concatenation with NULL in the view, resulting in a 500 error.
+ *
+ * [GEMINI PRINTER_CONFIG_UPDATE]:
+ * 1. Updated getStoreById to select new printer config fields.
  */
 
 // --- RMS: New Functions for Dynamic Recipe Engine ---
@@ -27,7 +37,7 @@ function getAllBaseProducts(PDO $pdo): array {
 }
 
 /**
- * 获取一个产品的完整详情，包括基础配方和所有调整规则
+ * 获取一个产品的完整详情，包括基础配方、所有调整规则和Gating选项
  */
 function getProductDetailsForRMS(PDO $pdo, int $productId): ?array {
     // 1. 获取基础产品信息
@@ -58,6 +68,11 @@ function getProductDetailsForRMS(PDO $pdo, int $productId): ?array {
     $stmt_adjustments = $pdo->prepare("SELECT * FROM kds_recipe_adjustments WHERE product_id = ?");
     $stmt_adjustments->execute([$productId]);
     $product['adjustments'] = $stmt_adjustments->fetchAll(PDO::FETCH_ASSOC);
+
+    // 4. (V2.2 GATING) 获取已勾选的 Gating 选项
+    $gatingOptions = getProductSelectedOptions($pdo, $productId);
+    $product['allowed_ice_ids'] = $gatingOptions['ice_ids'];
+    $product['allowed_sweetness_ids'] = $gatingOptions['sweetness_ids'];
 
     return $product;
 }
@@ -103,7 +118,7 @@ function getWarehouseStock(PDO $pdo): array {
         ORDER BY m.material_code ASC
     ";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getAllStoreStock(PDO $pdo): array {
@@ -122,7 +137,7 @@ function getAllStoreStock(PDO $pdo): array {
         ORDER BY s.store_code ASC, mt.material_name ASC
     ";
     $stmt = $pdo->query($sql);
-    $flat_results = $stmt->fetchAll();
+    $flat_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $grouped_results = [];
     foreach ($flat_results as $row) {
@@ -150,7 +165,7 @@ function getAllExpiryItems(PDO $pdo): array {
         ORDER BY e.expires_at DESC
     ";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 
@@ -158,12 +173,12 @@ function getAllExpiryItems(PDO $pdo): array {
 function getAllActiveIceOptions(PDO $pdo): array {
     $sql = "SELECT i.id, i.ice_code, it_zh.ice_option_name AS name_zh, it_zh.sop_description AS sop_zh FROM kds_ice_options i LEFT JOIN kds_ice_option_translations it_zh ON i.id = it_zh.ice_option_id AND it_zh.language_code = 'zh-CN' WHERE i.deleted_at IS NULL ORDER BY i.ice_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getAllActiveSweetnessOptions(PDO $pdo): array {
     $sql = "SELECT s.id, s.sweetness_code, st_zh.sweetness_option_name AS name_zh, st_zh.sop_description AS sop_zh FROM kds_sweetness_options s LEFT JOIN kds_sweetness_option_translations st_zh ON s.id = st_zh.sweetness_option_id AND st_zh.language_code = 'zh-CN' WHERE s.deleted_at IS NULL ORDER BY s.sweetness_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 
@@ -181,7 +196,7 @@ function getAllSweetnessOptions(PDO $pdo): array {
         WHERE s.deleted_at IS NULL 
         ORDER BY s.sweetness_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getSweetnessOptionById(PDO $pdo, int $id) {
     $sql = "
@@ -197,7 +212,7 @@ function getSweetnessOptionById(PDO $pdo, int $id) {
         WHERE s.id = ? AND s.deleted_at IS NULL";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 // --- Ice Option Management Functions ---
@@ -214,7 +229,7 @@ function getAllIceOptions(PDO $pdo): array {
         WHERE i.deleted_at IS NULL 
         ORDER BY i.ice_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getIceOptionById(PDO $pdo, int $id) {
     $sql = "
@@ -230,20 +245,20 @@ function getIceOptionById(PDO $pdo, int $id) {
         WHERE i.id = ? AND i.deleted_at IS NULL";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 // --- Unit Management Functions ---
 function getAllUnits(PDO $pdo): array {
     $sql = "SELECT u.id, u.unit_code, ut_zh.unit_name AS name_zh, ut_es.unit_name AS name_es FROM kds_units u LEFT JOIN kds_unit_translations ut_zh ON u.id = ut_zh.unit_id AND ut_zh.language_code = 'zh-CN' LEFT JOIN kds_unit_translations ut_es ON u.id = ut_es.unit_id AND ut_es.language_code = 'es-ES' WHERE u.deleted_at IS NULL ORDER BY u.unit_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getUnitById(PDO $pdo, int $id) {
     $sql = "SELECT u.id, u.unit_code, ut_zh.unit_name AS name_zh, ut_es.unit_name AS name_es FROM kds_units u LEFT JOIN kds_unit_translations ut_zh ON u.id = ut_zh.unit_id AND ut_zh.language_code = 'zh-CN' LEFT JOIN kds_unit_translations ut_es ON u.id = ut_es.unit_id AND ut_es.language_code = 'es-ES' WHERE u.id = ? AND u.deleted_at IS NULL";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 // --- Material Management Functions ---
@@ -263,7 +278,7 @@ function getAllMaterials(PDO $pdo): array {
         WHERE m.deleted_at IS NULL 
         ORDER BY m.material_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getMaterialById(PDO $pdo, int $id) {
     $sql = "
@@ -282,70 +297,86 @@ function getMaterialById(PDO $pdo, int $id) {
         WHERE m.id = ? AND m.deleted_at IS NULL";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 // --- Cup Management Functions ---
 function getAllCups(PDO $pdo): array {
-    $stmt = $pdo->query("SELECT id, cup_code, cup_name, sop_description_zh, volume_ml FROM kds_cups WHERE deleted_at IS NULL ORDER BY cup_code ASC");
-    return $stmt->fetchAll();
+    // FIX A2: Added sop_description_es to the query
+    $stmt = $pdo->query("SELECT id, cup_code, cup_name, sop_description_zh, sop_description_es, volume_ml FROM kds_cups WHERE deleted_at IS NULL ORDER BY cup_code ASC");
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getCupById(PDO $pdo, int $id) {
     $stmt = $pdo->prepare("SELECT id, cup_code, cup_name, sop_description_zh, sop_description_es, volume_ml FROM kds_cups WHERE id = ? AND deleted_at IS NULL");
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 // --- Product Management & Other Stable Functions ---
 function getAllStatuses(PDO $pdo): array {
-    $stmt = $pdo->query("SELECT id, status_name FROM kds_product_statuses ORDER BY status_code ASC");
-    return $stmt->fetchAll();
+    $stmt = $pdo->query("SELECT id, status_code, status_name_zh, status_name_es FROM kds_product_statuses WHERE deleted_at IS NULL ORDER BY status_code ASC");
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getAllProducts(PDO $pdo): array {
-    $sql = "SELECT p.id, p.product_code, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es, ps.status_name, p.is_active, p.created_at FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' LEFT JOIN kds_product_statuses ps ON p.status_id = ps.id WHERE p.deleted_at IS NULL ORDER BY p.product_code ASC";
+    $sql = "SELECT p.id, p.product_code, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es, ps.status_name_zh AS status_name, p.is_active, p.created_at FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' LEFT JOIN kds_product_statuses ps ON p.status_id = ps.id WHERE p.deleted_at IS NULL ORDER BY p.product_code ASC";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getProductById(PDO $pdo, int $id) {
     $sql = "SELECT p.*, pt_zh.product_name AS name_zh, pt_es.product_name AS name_es FROM kds_products p LEFT JOIN kds_product_translations pt_zh ON p.id = pt_zh.product_id AND pt_zh.language_code = 'zh-CN' LEFT JOIN kds_product_translations pt_es ON p.id = pt_es.product_id AND pt_es.language_code = 'es-ES' WHERE p.id = ? AND p.deleted_at IS NULL";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 function getRecipesByProductId(PDO $pdo, int $id): array {
     $stmt = $pdo->prepare("SELECT * FROM kds_product_recipes WHERE product_id = ? ORDER BY id ASC");
     $stmt->execute([$id]);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getAllStores(PDO $pdo): array {
     $stmt = $pdo->query("SELECT * FROM kds_stores WHERE deleted_at IS NULL ORDER BY store_code ASC");
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getStoreById(PDO $pdo, int $id) {
-    $stmt = $pdo->prepare("SELECT * FROM kds_stores WHERE id = ? AND deleted_at IS NULL");
+    // [GEMINI PRINTER_CONFIG_UPDATE]
+    // Added new printer fields to the SELECT statement
+    $stmt = $pdo->prepare("
+        SELECT *,
+               printer_type, printer_ip, printer_port, printer_mac 
+        FROM kds_stores 
+        WHERE id = ? AND deleted_at IS NULL
+    ");
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 function getAllKdsUsersByStoreId(PDO $pdo, int $store_id): array {
     $stmt = $pdo->prepare("SELECT id, username, display_name, role, is_active, last_login_at FROM kds_users WHERE store_id = ? AND deleted_at IS NULL ORDER BY id ASC");
     $stmt->execute([$store_id]);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 function getKdsUserById(PDO $pdo, int $id) {
     $stmt = $pdo->prepare("SELECT id, username, display_name, role, is_active, store_id FROM kds_users WHERE id = ? AND deleted_at IS NULL");
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
+
+/**
+ * (V2.2 GATING) 获取产品勾选的Gating选项
+ */
 function getProductSelectedOptions(PDO $pdo, int $product_id): array {
     $options = ['sweetness_ids' => [], 'ice_ids' => []];
+    
     $stmt_sweetness = $pdo->prepare("SELECT sweetness_option_id FROM kds_product_sweetness_options WHERE product_id = ?");
     $stmt_sweetness->execute([$product_id]);
     $options['sweetness_ids'] = $stmt_sweetness->fetchAll(PDO::FETCH_COLUMN, 0);
+
     $stmt_ice = $pdo->prepare("SELECT ice_option_id FROM kds_product_ice_options WHERE product_id = ?");
     $stmt_ice->execute([$product_id]);
     $options['ice_ids'] = $stmt_ice->fetchAll(PDO::FETCH_COLUMN, 0);
+    
     return $options;
 }
+
 function getProductAdjustments(PDO $pdo, int $product_id): array {
     $stmt = $pdo->prepare("SELECT * FROM kds_product_adjustments WHERE product_id = ?");
     $stmt->execute([$product_id]);
@@ -359,7 +390,7 @@ function getProductAdjustments(PDO $pdo, int $product_id): array {
 // --- NEW FUNCTION for POS ---
 function getAllPosCategories(PDO $pdo): array {
     $stmt = $pdo->query("SELECT * FROM pos_categories WHERE deleted_at IS NULL ORDER BY sort_order ASC, id ASC");
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // --- NEW FUNCTIONS for POS Menu Management ---
@@ -380,44 +411,56 @@ function getAllMenuItems(PDO $pdo): array {
         ORDER BY pc.sort_order ASC, mi.sort_order ASC, mi.id ASC
     ";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getMenuItemById(PDO $pdo, int $id) {
     $stmt = $pdo->prepare("SELECT id, name_zh FROM pos_menu_items WHERE id = ? AND deleted_at IS NULL");
     $stmt->execute([$id]);
-    return $stmt->fetch();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 function getAllVariantsByMenuItemId(PDO $pdo, int $menu_item_id): array {
+    // --- START: [GEMINI 500_ERROR_FIX] ---
+    // 1. 修复了 JOIN kds_product_translations pt ON p.id ... 的歧义性
+    // 2. 添加了 COALESCE，防止 $variant['product_sku'] 或 $variant['recipe_name_zh'] 为 NULL，
+    //    这会导致 view 文件中 `NULL . ' - ' . NULL` 尝试连接空值，引发 500 错误。
     $sql = "
         SELECT 
             pv.id,
             pv.variant_name_zh,
             pv.price_eur,
             pv.sort_order,
-            pv.is_default
+            pv.is_default,
+            COALESCE(p.product_code, 'N/A') AS product_sku,
+            COALESCE(pt.product_name, '未关联配方') AS recipe_name_zh,
+            p.id AS product_id
         FROM pos_item_variants pv
+        INNER JOIN pos_menu_items mi ON pv.menu_item_id = mi.id
+        LEFT JOIN kds_products p ON mi.product_code = p.product_code AND p.deleted_at IS NULL
+        LEFT JOIN kds_product_translations pt ON p.id = pt.product_id AND pt.language_code = 'zh-CN'
         WHERE pv.menu_item_id = ? AND pv.deleted_at IS NULL
         ORDER BY pv.sort_order ASC, pv.id ASC
     ";
+    // --- END: [GEMINI 500_ERROR_FIX] ---
+    
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$menu_item_id]);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getAllProductRecipesForSelect(PDO $pdo): array {
     $sql = "
         SELECT 
             p.id,
-            p.product_code,
+            p.product_code AS product_sku,
             pt.product_name AS name_zh
         FROM kds_products p
         LEFT JOIN kds_product_translations pt ON p.id = pt.product_id AND pt.language_code = 'zh-CN'
         WHERE p.deleted_at IS NULL
         ORDER BY p.product_code ASC
     ";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getAllInvoices(PDO $pdo): array {
@@ -436,7 +479,7 @@ function getAllInvoices(PDO $pdo): array {
         ORDER BY pi.issued_at DESC
     ";
     $stmt = $pdo->query($sql);
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getInvoiceDetails(PDO $pdo, int $invoice_id): ?array {
@@ -453,7 +496,7 @@ function getInvoiceDetails(PDO $pdo, int $invoice_id): ?array {
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$invoice_id]);
-    $invoice = $stmt->fetch();
+    $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$invoice) {
         return null;
@@ -462,7 +505,7 @@ function getInvoiceDetails(PDO $pdo, int $invoice_id): ?array {
     $sql_items = "SELECT * FROM pos_invoice_items WHERE invoice_id = ?";
     $stmt_items = $pdo->prepare($sql_items);
     $stmt_items->execute([$invoice_id]);
-    $items = $stmt_items->fetchAll();
+    $items = $stmt_items->fetchAll(PDO::FETCH_ASSOC);
 
     $invoice['items'] = $items;
     
@@ -474,13 +517,13 @@ function getInvoiceDetails(PDO $pdo, int $invoice_id): ?array {
 
 function getAllPromotions(PDO $pdo): array {
     $sql = "SELECT id, promo_name, promo_trigger_type, promo_start_date, promo_end_date, promo_is_active FROM pos_promotions ORDER BY promo_priority ASC, id DESC";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getPromotionById(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare("SELECT * FROM pos_promotions WHERE id = ?");
     $stmt->execute([$id]);
-    $promo = $stmt->fetch();
+    $promo = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($promo) {
         $promo['promo_conditions'] = json_decode($promo['promo_conditions'], true);
         $promo['promo_actions'] = json_decode($promo['promo_actions'], true);
@@ -490,7 +533,7 @@ function getPromotionById(PDO $pdo, int $id): ?array {
 
 function getAllMenuItemsForSelect(PDO $pdo): array {
     $sql = "SELECT id, name_zh FROM pos_menu_items WHERE deleted_at IS NULL AND is_active = 1 ORDER BY name_zh ASC";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getAllEodReports(PDO $pdo): array {
@@ -504,7 +547,7 @@ function getAllEodReports(PDO $pdo): array {
         LEFT JOIN cpsys_users cu ON per.user_id = cu.id
         ORDER BY per.report_date DESC, ks.store_code ASC
     ";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // --- NEW: Member Level & Member Management Functions ---
@@ -517,13 +560,13 @@ function getAllMemberLevels(PDO $pdo): array {
         LEFT JOIN pos_promotions pp ON pml.level_up_promo_id = pp.id
         ORDER BY pml.sort_order ASC, pml.points_threshold ASC
     ";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getMemberLevelById(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare("SELECT * FROM pos_member_levels WHERE id = ?");
     $stmt->execute([$id]);
-    $result = $stmt->fetch();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result ?: null;
 }
 
@@ -537,12 +580,37 @@ function getAllMembers(PDO $pdo): array {
         WHERE m.deleted_at IS NULL
         ORDER BY m.id DESC
     ";
-    return $pdo->query($sql)->fetchAll();
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getMemberById(PDO $pdo, int $id): ?array {
     $stmt = $pdo->prepare("SELECT * FROM pos_members WHERE id = ? AND deleted_at IS NULL");
     $stmt->execute([$id]);
-    $result = $stmt->fetch();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result ?: null;
 }
+
+// [GEMINI 500_ERROR_FIX] Moved this function here from index.php
+function getAllPosAddons(PDO $pdo): array {
+    try {
+        $sql = "
+            SELECT 
+                pa.*,
+                mt.material_name AS material_name_zh
+            FROM pos_addons pa
+            LEFT JOIN kds_materials m ON pa.material_id = m.id
+            LEFT JOIN kds_material_translations mt ON m.id = mt.material_id AND mt.language_code = 'zh-CN'
+            WHERE pa.deleted_at IS NULL
+            ORDER BY pa.sort_order ASC, pa.id ASC
+        ";
+        $stmt = $pdo->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        if ($e->getCode() == '42S02') { 
+             error_log("Warning: pos_addons table not found. " . $e->getMessage());
+             return [];
+        }
+        throw $e;
+    }
+}
+?>

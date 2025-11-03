@@ -2,7 +2,15 @@
 /**
  * Toptea HQ - cpsys
  * Main Entry Point
- * Engineer: Gemini | Date: 2025-10-31 | Revision: 13.0 (RMS Refactor)
+ * Engineer: Gemini | Date: 2025-11-02 | Revision: 14.1 (RMS V2.2 - Fix Directory Paths)
+ *
+ * [GEMINI ADDON_FIX]:
+ * 1. Added new route for 'pos_addon_management'.
+ * 2. Preload $materials for the addon form dropdown.
+ *
+ * [GEMINI 500_ERROR_FIX]:
+ * 1. Removed function definition 'getAllPosAddons' from this router file.
+ * 2. This function is now correctly placed in 'kds_helper.php'.
  */
 require_once realpath(__DIR__ . '/../../core/auth_core.php');
 header('Content-Type: text/html; charset=utf-8');
@@ -53,6 +61,23 @@ function getAllPrintTemplates(PDO $pdo): array {
     }
 }
 
+// (V2.2) Helper to get global rules
+function getAllGlobalRules(PDO $pdo): array {
+    try {
+        $stmt = $pdo->query("SELECT * FROM kds_global_adjustment_rules ORDER BY priority ASC, id ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        // Handle if table doesn't exist yet
+        if ($e->getCode() == '42S02') { 
+             error_log("Warning: kds_global_adjustment_rules table not found. " . $e->getMessage());
+             return [];
+        }
+        throw $e;
+    }
+}
+
+// [GEMINI 500_ERROR_FIX] Function 'getAllPosAddons' was moved to kds_helper.php
+
 
 switch ($page) {
     case 'dashboard':
@@ -60,11 +85,9 @@ switch ($page) {
         $content_view = APP_PATH . '/views/cpsys/dashboard_view.php';
         break;
 
-    // --- NEW RMS ROUTE ---
     case 'rms_product_management':
-        $page_title = 'RMS - 动态配方管理';
-        $base_products = getAllBaseProducts($pdo); // Fetch list for the left panel
-        // Pre-load all dictionary data for the form templates
+        $page_title = 'RMS - 产品配方 (L1/L3)';
+        $base_products = getAllBaseProducts($pdo);
         $material_options = getAllMaterials($pdo);
         $unit_options = getAllUnits($pdo);
         $cup_options = getAllCups($pdo);
@@ -75,7 +98,25 @@ switch ($page) {
         $page_js = 'rms/rms_product_management.js';
         break;
 
-    // --- Old product routes are now deprecated and removed ---
+    // --- (V2.2) NEW ROUTE ---
+    case 'rms_global_rules':
+        if (($_SESSION['role_id'] ?? null) !== ROLE_SUPER_ADMIN) {
+             $page = 'access_denied';
+             break;
+        }
+        $page_title = 'RMS - 全局规则 (L2)';
+        $global_rules = getAllGlobalRules($pdo);
+        // Load data needed for the form dropdowns
+        $material_options = getAllMaterials($pdo);
+        $unit_options = getAllUnits($pdo);
+        $cup_options = getAllCups($pdo);
+        $sweetness_options = getAllSweetnessOptions($pdo);
+        $ice_options = getAllIceOptions($pdo);
+        // (V2.2 PATH FIX)
+        $content_view = APP_PATH . '/views/cpsys/rms/rms_global_rules_view.php';
+        $page_js = 'rms/rms_global_rules.js';
+        break;
+    // --- END NEW ROUTE ---
 
     case 'expiry_management':
         $page_title = '效期管理';
@@ -119,7 +160,7 @@ switch ($page) {
         if (!$menu_item) { die("未找到指定的商品。"); }
         $page_title = 'POS 管理 - 管理规格';
         $variants = getAllVariantsByMenuItemId($pdo, $item_id);
-        $recipes = getAllProductRecipesForSelect($pdo); // This will need to be adjusted later
+        $recipes = getAllProductRecipesForSelect($pdo);
         $content_view = APP_PATH . '/views/cpsys/pos_variants_management_view.php';
         $page_js = 'pos_variants_management.js';
         break;
@@ -130,6 +171,16 @@ switch ($page) {
         $content_view = APP_PATH . '/views/cpsys/pos_category_management_view.php';
         $page_js = 'pos_category_management.js';
         break;
+
+    // [GEMINI ADDON_FIX] Start new route
+    case 'pos_addon_management':
+        $page_title = 'POS 管理 - 加料管理';
+        $addons = getAllPosAddons($pdo);
+        $materials = getAllMaterials($pdo); // For the material link dropdown
+        $content_view = APP_PATH . '/views/cpsys/pos_addon_management_view.php';
+        $page_js = 'pos_addon_management.js';
+        break;
+    // [GEMINI ADDON_FIX] End new route
         
     case 'pos_invoice_list':
         $page_title = 'POS 管理 - 票据查询';
@@ -243,6 +294,13 @@ switch ($page) {
         $sweetness_options = getAllSweetnessOptions($pdo);
         $content_view = APP_PATH . '/views/cpsys/sweetness_option_management_view.php';
         $page_js = 'sweetness_option_management.js';
+        break;
+
+    case 'product_status_management':
+        $page_title = '字典管理 - 产品状态';
+        $statuses = getAllStatuses($pdo);
+        $content_view = APP_PATH . '/views/cpsys/product_status_management_view.php';
+        $page_js = 'product_status_management.js';
         break;
 
     case 'user_management':

@@ -2,15 +2,20 @@
 /**
  * Toptea HQ - cpsys
  * Main Layout File
- * Engineer: Gemini | Date: 2025-10-31 | Revision: 13.0 (RMS Refactor)
+ * Engineer: Gemini | Date: 2025-11-02 | Revision: 14.0 (RMS V2.2 - Add Global Rules Menu)
+ *
+ * [GEMINI ADDON_FIX]:
+ * 1. Added 'pos_addon_management' to $posPages array.
+ * 2. Added new menu link for '加料管理' under POS 管理.
  */
 $page_title = $page_title ?? 'TopTea HQ';
 $page = $_GET['page'] ?? 'dashboard';
 
 // Updated page groups for menu highlighting
-$rmsPages = ['rms_product_management'];
-$posPages = ['pos_menu_management', 'pos_variants_management', 'pos_category_management', 'pos_invoice_list', 'pos_invoice_detail', 'pos_promotion_management', 'pos_eod_reports', 'pos_member_level_management', 'pos_member_management', 'pos_member_settings', 'pos_point_redemption_rules'];
-$dictionaryPages = ['cup_management', 'material_management', 'unit_management', 'ice_option_management', 'sweetness_option_management'];
+$rmsPages = ['rms_product_management', 'rms_global_rules']; // (V2.2) Added global rules
+// [GEMINI ADDON_FIX]
+$posPages = ['pos_menu_management', 'pos_variants_management', 'pos_category_management', 'pos_invoice_list', 'pos_invoice_detail', 'pos_promotion_management', 'pos_eod_reports', 'pos_member_level_management', 'pos_member_management', 'pos_member_settings', 'pos_point_redemption_rules', 'pos_addon_management'];
+$dictionaryPages = ['cup_management', 'material_management', 'unit_management', 'ice_option_management', 'sweetness_option_management', 'product_status_management'];
 $systemPages = ['user_management', 'store_management', 'kds_user_management', 'pos_print_template_management', 'pos_print_template_variables'];
 $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_view'];
 ?>
@@ -35,9 +40,21 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?php echo (in_array($page, $rmsPages)) ? 'active' : ''; ?>" href="index.php?page=rms_product_management">
+                    <a class="nav-link collapsed <?php echo (in_array($page, $rmsPages)) ? 'active' : ''; ?>" href="#" data-bs-toggle="collapse" data-bs-target="#rms-submenu" aria-expanded="<?php echo (in_array($page, $rmsPages)) ? 'true' : 'false'; ?>">
                         <i class="bi bi-cup-straw me-2"></i>配方管理 (RMS)
                     </a>
+                    <div class="collapse <?php echo (in_array($page, $rmsPages)) ? 'show' : ''; ?>" id="rms-submenu">
+                        <ul class="nav flex-column ps-4">
+                            <li class="nav-item">
+                                <a class="nav-link <?php echo ($page === 'rms_product_management') ? 'active' : ''; ?>" href="index.php?page=rms_product_management">产品配方 (L1/L3)</a>
+                            </li>
+                            <?php if (($_SESSION['role_id'] ?? null) === ROLE_SUPER_ADMIN): ?>
+                            <li class="nav-item">
+                                <a class="nav-link <?php echo ($page === 'rms_global_rules') ? 'active' : ''; ?>" href="index.php?page=rms_global_rules">全局规则 (L2)</a>
+                            </li>
+                            <?php endif; ?>
+                        </ul>
+                    </div>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link <?php echo ($page === 'expiry_management') ? 'active' : ''; ?>" href="index.php?page=expiry_management">
@@ -61,6 +78,7 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                             <ul class="nav flex-column ps-4">
                                 <li class="nav-item"><a class="nav-link <?php echo (in_array($page, ['pos_menu_management', 'pos_variants_management'])) ? 'active' : ''; ?>" href="index.php?page=pos_menu_management">菜单管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_category_management') ? 'active' : ''; ?>" href="index.php?page=pos_category_management">POS分类管理</a></li>
+                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_addon_management') ? 'active' : ''; ?>" href="index.php?page=pos_addon_management">加料管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_promotion_management') ? 'active' : ''; ?>" href="index.php?page=pos_promotion_management">营销活动管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo (in_array($page, ['pos_invoice_list', 'pos_invoice_detail'])) ? 'active' : ''; ?>" href="index.php?page=pos_invoice_list">票据查询</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'pos_eod_reports') ? 'active' : ''; ?>" href="index.php?page=pos_eod_reports">日结报告</a></li>
@@ -80,6 +98,7 @@ $stockPages = ['warehouse_stock_management', 'stock_allocation', 'store_stock_vi
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'unit_management') ? 'active' : ''; ?>" href="index.php?page=unit_management">单位管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'ice_option_management') ? 'active' : ''; ?>" href="index.php?page=ice_option_management">冰量选项管理</a></li>
                                 <li class="nav-item"><a class="nav-link <?php echo ($page === 'sweetness_option_management') ? 'active' : ''; ?>" href="index.php?page=sweetness_option_management">甜度选项管理</a></li>
+                                <li class="nav-item"><a class="nav-link <?php echo ($page === 'product_status_management') ? 'active' : ''; ?>" href="index.php?page=product_status_management">状态管理</a></li>
                             </ul>
                         </div>
                     </li>
