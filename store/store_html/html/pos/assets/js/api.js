@@ -35,6 +35,11 @@ export async function fetchInitialData() {
         STATE.categories = result.data.categories;
         STATE.addons = result.data.addons;
         STATE.redemptionRules = result.data.redemption_rules || [];
+        
+        // (V2.2 GATING) Populate master lists
+        STATE.iceOptions = result.data.ice_options || [];
+        STATE.sweetnessOptions = result.data.sweetness_options || [];
+
         if (!STATE.active_category_key && STATE.categories.length > 0) {
             STATE.active_category_key = STATE.categories[0].key;
         }

@@ -1,149 +1,371 @@
+/**
+ * ui.js — POS 核心 UI 渲染引擎 (V2.2 - Gating 修复版)
+ *
+ * - 修复：重建了被 cart.js 覆盖的 ui.js 文件。
+ * - 实现 [RMS V2.2]：openCustomize 函数现在会检查产品的 allowed_ice_ids 和
+ * allowed_sweetness_ids (来自 pos_data_loader.php)，
+ * 并只渲染被允许的选项按钮。
+ *
+ * [GEMINI A1.jpg FIX 2.0 - JS]
+ * 1. (问题 1) 修复 openCustomize，将产品名称添加到 .offcanvas-title
+ * 2. (问题 2) 修复 Gating 渲染逻辑，确保 *第一个* 可见选项被 'checked'，
+ * 3. (问题 3) 修复 updateCustomizePrice，使其更新正确的 #custom_item_price ID
+ * 4. 修复所有选择器以匹配 index.php 中新修复的 ID。
+ */
+
 import { STATE } from './state.js';
 import { t, fmtEUR } from './utils.js';
 
-export function applyI18N() {
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.dataset.i18n;
-        if (key) el.textContent = t(key);
-    });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-        const key = el.dataset.i18nPlaceholder;
-        if (key) el.placeholder = t(key);
-    });
-    $('#search_input').attr('placeholder', t('placeholder_search'));
-    $('#lang_toggle').html(`<span class="flag">${STATE.lang === 'zh' ? '🇨🇳' : '🇪🇸'}</span> ${t('lang_' + STATE.lang)}`);
-    // Also update points placeholder on lang change
-    $('#points_to_redeem_input').attr('placeholder', t('points_redeem_placeholder'));
-}
+const lang = () => STATE.lang || 'zh';
 
-export function renderCategories() {
-    const $wrap = $('#category_scroller').empty();
-    STATE.categories.forEach(cat => {
-        const active = STATE.active_category_key === cat.key ? 'active' : '';
-        const label = STATE.lang === 'es' ? cat.label_es : cat.label_zh;
-        $wrap.append($(`<button class="nav-link ${active}" data-cat="${cat.key}">${label}</button>`));
-    });
-}
-
-export function renderProducts() {
-    const $grid = $('#product_grid').empty();
-    const q = ($('#search_input').val() || '').trim().toLowerCase();
-    const filtered = STATE.products.filter(p => {
-        const name = (STATE.lang === 'es' ? p.title_es : p.title_zh).toLowerCase();
-        return p.category_key === STATE.active_category_key && (!q || name.includes(q) || p.id.toString().includes(q));
-    });
-    if (!filtered.length) {
-        $grid.append(`<div class="col-12"><div class="alert alert-sheet">${t('no_products_in_category')}</div></div>`);
-        return;
-    }
-    filtered.forEach(p => {
-        const name = STATE.lang === 'es' ? (p.title_es || p.title_zh) : p.title_zh;
-        const defaultVariant = p.variants.find(v => v.is_default) || p.variants[0];
-        const priceDisplay = defaultVariant ? fmtEUR(defaultVariant.price_eur) : 'N/A';
-        $grid.append(`<div class="col-6 col-sm-4 col-md-3 col-lg-2"><div class="product-card h-100 d-flex flex-column" data-id="${p.id}"><div class="flex-grow-1"><div class="product-title">${name}</div><div class="small text-muted">${p.id}</div></div><div class="d-flex justify-content-between align-items-center mt-2"><div class="product-price">${priceDisplay}</div><button class="btn btn-sm btn-brand">${t('choose_variant')}</button></div></div></div>`);
-    });
-}
-
-export function renderAddons() {
-    const $list = $('#addon_list').empty();
-    STATE.addons.forEach(a => {
-        const label = STATE.lang === 'es' ? a.label_es : a.label_zh;
-        $list.append(`<div class="addon-chip" data-key="${a.key}" data-price="${a.price_eur}">${label} +${fmtEUR(a.price_eur)}</div>`);
-    });
-}
-
+/**
+ * [RMS V2.2] 核心实现：打开定制面板
+ * (Gating 逻辑已注入)
+ */
 export function openCustomize(productId) {
     const product = STATE.products.find(p => p.id === productId);
-    if (!product || !product.variants?.length) return;
-    $('#customize_title').text(STATE.lang === 'es' ? product.title_es : product.title_zh);
-    const $variantList = $('#customize_variants_list').empty();
-    const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0];
-    product.variants.forEach(variant => {
-        const variantName = STATE.lang === 'es' ? variant.name_es : variant.name_zh;
-        const checked = variant.id === defaultVariant.id ? 'checked' : '';
-        $variantList.append(`<input type="radio" class="btn-check" name="variant_selector" id="variant_${variant.id}" value="${variant.id}" ${checked}><label class="btn btn-pill" for="variant_${variant.id}">${variantName}</label>`);
-    });
-    $('#ice_50, #sugar_50').prop('checked', true);
-    $('#remark_input').val('');
-    $('#addon_list .addon-chip').removeClass('active');
-    $('#customizeOffcanvas').data('product', product);
-    updateCustomizePrice();
-    new bootstrap.Offcanvas('#customizeOffcanvas').show();
-}
-
-export function updateCustomizePrice() {
-    const product = $('#customizeOffcanvas').data('product');
-    if (!product) return;
-    const selectedVariantId = parseInt($('input[name="variant_selector"]:checked').val());
-    const selectedVariant = product.variants.find(v => v.id === selectedVariantId);
-    if (!selectedVariant) return;
-    let price = parseFloat(selectedVariant.price_eur);
-    $('#addon_list .addon-chip.active').each(function () {
-        price += parseFloat($(this).data('price')) || 0;
-    });
-    $('#customize_price').text(fmtEUR(price));
-}
-
-export function refreshCartUI() {
-    const totalQty = STATE.cart.reduce((sum, item) => sum + item.qty, 0);
-    $('#cart_count').text(totalQty);
-    const $list = $('#cart_items').empty();
-    const cartToRender = STATE.calculatedCart.cart.length > 0 ? STATE.calculatedCart.cart : STATE.cart;
-    if (cartToRender.length === 0) {
-        $list.html(`<div class="text-center p-5 text-muted">${t('tip_empty_cart')}</div>`);
-    } else {
-        cartToRender.forEach(it => {
-            const finalPrice = it.final_price ?? it.unit_price_eur;
-            const originalPrice = it.original_price ?? it.unit_price_eur;
-            const line_total = finalPrice * it.qty;
-            const isDiscounted = finalPrice < originalPrice;
-            const priceHtml = isDiscounted ? `<div class="fw-semibold">${fmtEUR(line_total)} <del class="text-muted small ms-1">${fmtEUR(originalPrice * it.qty)}</del></div>` : `<div class="fw-semibold">${fmtEUR(line_total)}</div>`;
-            const discountInfoHtml = it.discount_applied ? `<div class="small text-brand">${t('promo_applied')}: ${it.discount_applied}</div>` : '';
-            const custom_details = [`I${it.ice}`, `S${it.sugar}`, ...it.addons].join('·');
-            const remark_html = it.remark ? `<div class="small text-muted">${t('remark').split('（')[0]}：${it.remark}</div>` : '';
-            $list.append(`<div class="list-group-item"><div class="d-flex justify-content-between align-items-start"><div><div class="fw-semibold">${it.title} <span class="text-muted">(${it.variant_name})</span></div><div class="small text-muted">${custom_details}</div>${remark_html}${discountInfoHtml}</div><div class="text-end">${priceHtml}<div class="qty-stepper mt-1"><button class="btn btn-outline-ink btn-sm" data-act="dec" data-id="${it.id}"><i class="bi bi-dash-lg"></i></button><span>${it.qty}</span><button class="btn btn-outline-ink btn-sm" data-act="inc" data-id="${it.id}"><i class="bi bi-plus-lg"></i></button><button class="btn btn-outline-ink btn-sm ms-2" data-act="del" data-id="${it.id}"><i class="bi bi-trash3"></i></button></div></div></div></div>`);
-        });
+    if (!product) {
+        console.error("Product not found:", productId);
+        return;
     }
-    const subtotal = STATE.calculatedCart.subtotal > 0 ? STATE.calculatedCart.subtotal : STATE.cart.reduce((sum, item) => sum + (item.unit_price_eur * item.qty), 0);
-    const finalTotal = STATE.calculatedCart.final_total > 0 ? STATE.calculatedCart.final_total : subtotal;
-    $('#cart_total').text(fmtEUR(subtotal));
-    $('#cart_payable').text(fmtEUR(finalTotal));
-    $('#btn_cart_checkout_label').text(`${t('go_checkout')} · ${fmtEUR(finalTotal)}`);
+
+    const customizeOffcanvas = new bootstrap.Offcanvas('#customizeOffcanvas');
+    const $canvas = $('#customizeOffcanvas');
+
+    // 1. 绑定产品数据
+    $canvas.data('product', product);
+    // [GEMINI A1.jpg FIX 1] 将产品名称添加到标题栏
+    $canvas.find('.offcanvas-title').text(`${t('customizing')}: ${lang() === 'es' ? product.title_es : product.title_zh}`);
+
+
+    // 2. 渲染规格 (Variants)
+    // [GEMINI A1.jpg FIX 4] 目标 ID 修正为 #variant_selector_list
+    const $variantContainer = $canvas.find('#variant_selector_list').empty();
+    if (!product.variants || product.variants.length === 0) {
+        $variantContainer.html(`<div class="alert alert-danger">${t('choose_variant')}</div>`);
+        return;
+    }
+    
+    let defaultVariant = product.variants.find(v => v.is_default) || product.variants[0];
+    product.variants.forEach(variant => {
+        const variantHtml = `
+            <input type="radio" class="btn-check" name="variant_selector" id="variant_${variant.id}" value="${variant.id}" ${variant.id === defaultVariant.id ? 'checked' : ''}>
+            <label class="btn btn-pill" for="variant_${variant.id}">
+                ${lang() === 'es' ? variant.name_es : variant.name_zh}
+            </label>
+        `;
+        $variantContainer.append(variantHtml);
+    });
+
+    // 3. [RMS V2.2 GATING] 渲染冰量选项 (Ice)
+    // [GEMINI A1.jpg FIX 4] 目标 ID 修正为 #ice_selector_list
+    const $iceContainer = $canvas.find('#ice_selector_list').empty();
+    const iceMasterList = STATE.iceOptions || [];
+    const allowedIceIds = product.allowed_ice_ids; // null | number[]
+    let visibleIceOptions = 0;
+
+    // 遍历“主列表”
+    iceMasterList.forEach((iceOpt) => {
+        // Gating 检查:
+        // 1. 如果 allowedIceIds 为 null (未设置规则)，则全部显示。
+        // 2. 如果 allowedIceIds 是数组，则检查 id 是否在数组中。
+        const isAllowed = (allowedIceIds === null) || (Array.isArray(allowedIceIds) && allowedIceIds.includes(iceOpt.id));
+        
+        if (isAllowed) {
+            // [GEMINI A1.jpg FIX 2] 确保第一个可见选项被选中
+            const isChecked = (visibleIceOptions === 0);
+            visibleIceOptions++;
+            const iceHtml = `
+                <input type="radio" class="btn-check" name="ice" id="ice_${iceOpt.ice_code}" value="${iceOpt.ice_code}" ${isChecked ? 'checked' : ''}>
+                <label class="btn btn-pill" for="ice_${iceOpt.ice_code}">
+                    ${lang() === 'es' ? iceOpt.name_es : iceOpt.name_zh}
+                </label>
+            `;
+            $iceContainer.append(iceHtml);
+        }
+    });
+    // 如果 Gating 导致没有选项，则隐藏该部分
+    $iceContainer.closest('.mb-4').toggle(visibleIceOptions > 0); // (使用 .mb-4 定位父元素)
+
+
+    // 4. [RMS V2.2 GATING] 渲染糖度选项 (Sugar)
+    // [GEMINI A1.jpg FIX 4] 目标 ID 修正为 #sugar_selector_list
+    const $sugarContainer = $canvas.find('#sugar_selector_list').empty();
+    const sugarMasterList = STATE.sweetnessOptions || [];
+    const allowedSweetnessIds = product.allowed_sweetness_ids; // null | number[]
+    let visibleSugarOptions = 0;
+
+    // 遍历“主列表”
+    sugarMasterList.forEach((sugarOpt) => {
+        // Gating 检查:
+        const isAllowed = (allowedSweetnessIds === null) || (Array.isArray(allowedSweetnessIds) && allowedSweetnessIds.includes(sugarOpt.id));
+
+        if (isAllowed) {
+            // [GEMINI A1.jpg FIX 2] 确保第一个可见选项被选中
+            const isChecked = (visibleSugarOptions === 0);
+            visibleSugarOptions++;
+            const sugarHtml = `
+                <input type="radio" class="btn-check" name="sugar" id="sugar_${sugarOpt.sweetness_code}" value="${sugarOpt.sweetness_code}" ${isChecked ? 'checked' : ''}>
+                <label class="btn btn-pill" for="sugar_${sugarOpt.sweetness_code}">
+                    ${lang() === 'es' ? sugarOpt.name_es : sugarOpt.name_zh}
+                </label>
+            `;
+            $sugarContainer.append(sugarHtml);
+        }
+    });
+    // 如果 Gating 导致没有选项，则隐藏该部分
+    $sugarContainer.closest('.mb-4').toggle(visibleSugarOptions > 0); // (使用 .mb-4 定位父元素)
+
+
+    // 5. 渲染加料 (Addons) - (Addons 不参与 Gating)
+    renderAddons();
+    
+    // 6. 清空备注并更新价格
+    $('#remark_input').val('');
+    updateCustomizePrice(); // [GEMINI A1.jpg FIX 2] 此调用现在会基于默认选中的 Gating 选项正确计算价格
+    customizeOffcanvas.show();
 }
 
+/**
+ * 渲染加料区 (在 openCustomize 时调用)
+ */
+export function renderAddons() {
+    const $addonContainer = $('#addon_list').empty();
+    if (!STATE.addons || STATE.addons.length === 0) {
+        $addonContainer.html(`<p class="text-muted small">${t('no_addons_available')}</p>`);
+        return;
+    }
+    STATE.addons.forEach(addon => {
+        const addonHtml = `
+            <div class="col-4 g-2">
+                <div class="addon-chip" data-key="${addon.key}" data-price="${addon.price_eur}">
+                    ${lang() === 'es' ? addon.label_es : addon.label_zh}
+                    <small class="d-block text-muted">+${fmtEUR(addon.price_eur)}</small>
+                </div>
+            </div>
+        `;
+        $addonContainer.append(addonHtml);
+    });
+}
+
+/**
+ * 更新定制面板中的“当前价格”
+ */
+export function updateCustomizePrice() {
+    const $canvas = $('#customizeOffcanvas');
+    const product = $canvas.data('product');
+    if (!product) return;
+
+    const selectedVariantId = parseInt($('input[name="variant_selector"]:checked').val());
+    const variant = product.variants.find(v => v.id === selectedVariantId);
+    
+    // [GEMINI A1.jpg FIX 2] 增加日志以防万一
+    if (!variant) {
+        // [GEMINI A1.jpg FIX 2] 这是控制台错误来源
+        console.error("updateCustomizePrice: 未找到选中的 variant (ID: " + selectedVariantId + ")。价格将为0。");
+        // [GEMINI A1.jpg FIX 3] 目标 ID 修正为 #custom_item_price
+        $canvas.find('#custom_item_price').text(fmtEUR(0));
+        return;
+    }
+
+    let currentPrice = parseFloat(variant.price_eur);
+    
+    $('#addon_list .addon-chip.active').each(function () {
+        currentPrice += parseFloat($(this).data('price')) || 0;
+    });
+
+    // [GEMINI A1.jpg FIX 3] 目标 ID 修正为 #custom_item_price
+    $canvas.find('#custom_item_price').text(fmtEUR(currentPrice));
+}
+
+/**
+ * 渲染分类列表
+ */
+export function renderCategories() {
+    const $container = $('#category_scroller');
+    if (!$container.length) return;
+    
+    $container.empty();
+    STATE.categories.forEach(cat => {
+        $container.append(`
+            <li class="nav-item">
+                <a class="nav-link ${cat.key === STATE.active_category_key ? 'active' : ''}" href="#" data-cat="${cat.key}">
+                    ${lang() === 'es' ? cat.label_es : cat.label_zh}
+                </a>
+            </li>
+        `);
+    });
+}
+
+/**
+ * 渲染产品网格
+ */
+export function renderProducts() {
+    const $grid = $('#product_grid');
+    if (!$grid.length) return;
+    
+    $grid.empty();
+    
+    const searchText = $('#search_input').val().toLowerCase();
+    
+    const filteredProducts = STATE.products.filter(p => {
+        const inCategory = p.category_key === STATE.active_category_key;
+        if (!inCategory) return false;
+        
+        if (searchText) {
+            return p.title_zh.toLowerCase().includes(searchText) || 
+                   p.title_es.toLowerCase().includes(searchText);
+            // 可以在这里添加 SKU 或拼音简称的搜索
+        }
+        return true;
+    });
+
+    if (filteredProducts.length === 0) {
+        $grid.html(`<div class="col-12"><div class="alert alert-sheet">${t('no_products_in_category')}</div></div>`);
+        return;
+    }
+
+    filteredProducts.forEach(p => {
+        const defaultVariant = p.variants.find(v => v.is_default) || p.variants[0];
+        $grid.append(`
+            <div class="col">
+                <div class="product-card" data-id="${p.id}">
+                    <div class="product-title mb-1">${lang() === 'es' ? p.title_es : p.title_zh}</div>
+                    <div class="product-price text-brand">${fmtEUR(defaultVariant.price_eur)}</div>
+                </div>
+            </div>
+        `);
+    });
+}
+
+/**
+ * 刷新购物车UI
+ */
+export function refreshCartUI() {
+    const $cartItems = $('#cart_items').empty();
+    const $cartFooter = $('#cart_footer');
+    
+    if (STATE.cart.length === 0) {
+        $cartItems.html(`<div class="alert alert-sheet">${t('tip_empty_cart')}</div>`);
+        $cartFooter.hide();
+        $('#cart_badge').text('0').hide();
+        return;
+    }
+
+    STATE.cart.forEach(item => {
+        $cartItems.append(`
+            <div class="list-group-item">
+                <div class="d-flex w-100">
+                    <div>
+                        <h6 class="mb-1">${item.title} (${item.variant_name})</h6>
+                        <small class="text-muted">
+                            ${t('ice')}: ${item.ice} | ${t('sugar')}: ${item.sugar} | 
+                            ${t('addons')}: ${item.addons.join(', ') || 'N/A'}
+                        </small>
+                        ${item.remark ? `<br><small class="text-info">${t('remark')}: ${item.remark}</small>` : ''}
+                    </div>
+                    <div class="ms-auto text-end">
+                        <div class="fw-bold">${fmtEUR(item.unit_price_eur * item.qty)}</div>
+                        <div class="qty-stepper mt-1">
+                            <button class="btn btn-sm btn-outline-secondary" data-act="del" data-id="${item.id}"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" data-act="dec" data-id="${item.id}"><i class="bi bi-dash"></i></button>
+                            <span class="px-1">${item.qty}</span>
+                            <button class="btn btn-sm btn-outline-secondary" data-act="inc" data-id="${item.id}"><i class="bi bi-plus"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+    });
+
+    const { subtotal, discount_amount, final_total } = STATE.calculatedCart;
+    $('#cart_subtotal').text(fmtEUR(subtotal));
+    $('#cart_discount').text(`-${fmtEUR(discount_amount)}`);
+    $('#cart_final_total').text(fmtEUR(final_total));
+    
+    $cartFooter.show();
+    $('#cart_badge').text(STATE.cart.length).show();
+}
+
+/**
+ * 更新会员UI
+ */
 export function updateMemberUI() {
     const $container = $('#member_section');
-    const $pointsSection = $('#points_redemption_section');
-
     if (STATE.activeMember) {
-        const member = STATE.activeMember;
-        const name = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.phone_number;
-        const level = (STATE.lang === 'es' ? member.level_name_es : member.level_name_zh) || '-';
-        const html = `
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <h6 class="mb-0">${name}</h6>
-                    <small class="text-muted">${member.phone_number}</small>
-                </div>
-                <button class="btn btn-sm btn-outline-danger" id="btn_unlink_member">${t('member_unlink')}</button>
-            </div>
-            <div class="d-flex justify-content-between text-muted small mt-2">
-                <span>${t('member_points')}: <strong>${parseFloat(member.points_balance).toFixed(2)}</strong></span>
-                <span>${t('member_level')}: <strong>${level}</strong></span>
-            </div>`;
-        $container.html(html);
-        $pointsSection.slideDown(); // Show points section
+        $container.find('#member_info').show();
+        $container.find('#member_search').hide();
+        $container.find('#member_name').text(STATE.activeMember.first_name || STATE.activeMember.phone_number);
+        $container.find('#member_points').text(STATE.activeMember.points_balance || 0);
+        $container.find('#member_level').text(STATE.lang === 'es' ? (STATE.activeMember.level_name_es || 'N/A') : (STATE.activeMember.level_name_zh || 'N/A'));
+        $('#points_to_redeem_input').prop('disabled', false);
+        $('#apply_points_btn').prop('disabled', false);
     } else {
-        const html = `
-            <div class="input-group">
-                <input type="tel" class="form-control" id="member_search_phone" placeholder="${t('member_search_placeholder')}">
-                <button class="btn btn-outline-secondary" type="button" id="btn_find_member">${t('member_find')}</button>
-            </div>
-            <div id="member_search_result" class="mt-2"></div>`;
-        $container.html(html);
-        $pointsSection.slideUp(); // Hide points section
-        $('#points_to_redeem_input').val(''); // Clear input on unlink
+        $container.find('#member_info').hide();
+        $container.find('#member_search').show();
+        $('#member_search_phone').val('');
+        $('#points_to_redeem_input').val('').prop('disabled', true);
+        $('#apply_points_btn').prop('disabled', true);
         $('#points_feedback').text('');
     }
-    applyI18N();
+    // 渲染积分兑换规则
+    renderRedemptionRules();
+}
+
+/**
+ * 渲染积分兑换规则
+ */
+function renderRedemptionRules() {
+    const $container = $('#available_rewards_list').empty();
+    if (!STATE.activeMember || !STATE.redemptionRules || STATE.redemptionRules.length === 0) {
+        $container.html(`<small class="text-muted">${t('no_available_rewards')}</small>`);
+        return;
+    }
+
+    const memberPoints = parseFloat(STATE.activeMember.points_balance || 0);
+    let visibleRules = 0;
+
+    STATE.redemptionRules.forEach(rule => {
+        const pointsRequired = parseFloat(rule.points_required);
+        const canAfford = memberPoints >= pointsRequired;
+        const rewardText = (lang() === 'es' ? rule.rule_name_es : rule.rule_name_zh);
+        
+        // 检查此规则是否已被应用 (TODO: 将来需要更复杂的检查)
+        const isApplied = (STATE.activeRedemptionRuleId === rule.id);
+
+        const ruleHtml = `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="fw-bold">${rewardText}</span>
+                    <small class="d-block text-muted">${t('requires_points', { points: pointsRequired })}</small>
+                </div>
+                <button class="btn btn-sm ${isApplied ? 'btn-success' : 'btn-outline-primary'} btn-redeem-reward" 
+                        data-rule-id="${rule.id}" 
+                        ${!canAfford && !isApplied ? 'disabled' : ''}>
+                    ${isApplied ? t('redemption_applied') : (canAfford ? t('points_redeem_button') : t('points_insufficient'))}
+                </button>
+            </div>
+        `;
+        $container.append(ruleHtml);
+        visibleRules++;
+    });
+
+    if (visibleRules === 0) {
+         $container.html(`<small class="text-muted">${t('no_available_rewards')}</small>`);
+    }
+}
+
+
+/**
+ * 应用国际化 (I18N)
+ */
+export function applyI18N() {
+    $('[data-i18n]').each(function () {
+        const key = $(this).data('i18n');
+        $(this).text(t(key));
+    });
+    $('[data-i18n-placeholder]').each(function () {
+        const key = $(this).data('i1im-placeholder');
+        $(this).attr('placeholder', t(key));
+    });
 }

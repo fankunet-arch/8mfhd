@@ -13,7 +13,9 @@
       <div id="product-info-area">
           <div class="kds-cup-number mb-2 text-muted">---</div>
           <h3 class="fw-bold mb-3 text-muted" data-i18n-key="info_enter_sku">请先输入编码</h3>
-          <div class="kds-info-display text-muted">--</div>
+          <div id="kds-info-display-container">
+            <div class="kds-info-display text-muted">--</div>
+          </div>
       </div>
 
       <div id="dynamic-options-container" class="mt-3"></div>
@@ -58,7 +60,25 @@
           <div class="kds-step-tab" role="tab" tabindex="0" data-step="topping"><span class="step-number">③</span> <span data-i18n-key="step_topping">顶料</span></div>
           <div class="ms-auto kds-tip"><i class="bi bi-check-circle-fill me-2"></i><span id="kds-step-tip" data-i18n-key="tip_waiting">请输入饮品编码开始查询</span></div>
         </div>
-        <div id="kds-cards" class="row g-4"><div class="col-12 text-center text-muted pt-5"><h4 data-i18n-key="cards_waiting">等待查询...</h4></div></div>
+
+        <div id="kds-cards-container">
+            <div id="cards-base" class="row g-4 step-cards">
+                <div class="col-12 text-center text-muted pt-5 kds-waiting-placeholder">
+                    <h4 data-i18n-key="cards_waiting">等待查询...</h4>
+                </div>
+            </div>
+            <div id="cards-mixing" class="row g-4 step-cards" style="display: none;">
+                <div class="col-12 text-center text-muted pt-5 kds-waiting-placeholder">
+                    <h4 data-i18n-key="cards_waiting">等待查询...</h4>
+                </div>
+            </div>
+            <div id="cards-topping" class="row g-4 step-cards" style="display: none;">
+                <div class="col-12 text-center text-muted pt-5 kds-waiting-placeholder">
+                    <h4 data-i18n-key="cards_waiting">等待查询...</h4>
+                </div>
+            </div>
+        </div>
+
       </div>
     </div>
 </div>

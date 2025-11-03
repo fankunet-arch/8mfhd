@@ -5,7 +5,7 @@
  * - 高峰模式：按钮/开关均可用
  * - 兼容旧键：POS_HAND_MODE / POS_LEFTY / POS_RIGHTY
  * - 额外桥接：点击包含 hand_mode 的整行也会触发切换（防止“选中了但未触发事件”）
- * Revision: 2.3.1 (Add hold i18n keys)
+ * Revision: 2.4.0 (RMS V2.2 - Gating State)
  */
 
 //////////////////// I18N ////////////////////
@@ -147,6 +147,8 @@ export const STATE = {
   addons: [],
   redemptionRules: [],
   printTemplates: {}, // --- CORE ADDITION: Store for print templates ---
+  iceOptions: [], // (V2.2 GATING)
+  sweetnessOptions: [], // (V2.2 GATING)
   activeCouponCode: '',
   activeRedemptionRuleId: null,
   calculatedCart: { cart: [], subtotal: 0, discount_amount: 0, final_total: 0 },
